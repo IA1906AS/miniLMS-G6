@@ -1,10 +1,7 @@
 import pytest
 
 from app import create_app
-from app.auth import bp as auth_bp
 from app.errors import Forbidden, NotFound, ValidationError
-from app.gate import register_gate
-from app.routes import register_routes
 from app.services import get_grades, update_grade
 
 
@@ -14,9 +11,6 @@ def client(tmp_path):
         "JWT_SECRET": "x" * 32,
         "AUDIT_LOG_PATH": str(tmp_path / "audit.log"),
     })
-    app.register_blueprint(auth_bp)
-    register_gate(app)
-    register_routes(app)
     return app.test_client()
 
 
