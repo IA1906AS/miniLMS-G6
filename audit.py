@@ -28,7 +28,7 @@ def _get_audit_log_path() -> str:
 
         if has_app_context() and current_app:
             return current_app.config.get("AUDIT_LOG_PATH", AUDIT_LOG_PATH)
-    except ImportError, RuntimeError:
+    except (ImportError, RuntimeError):
         pass
     return os.environ.get("AUDIT_LOG_PATH", AUDIT_LOG_PATH)
 
