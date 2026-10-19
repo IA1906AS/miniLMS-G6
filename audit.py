@@ -1,9 +1,9 @@
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Default audit log path
 DEFAULT_AUDIT_LOG_PATH = "audit.log"
@@ -28,7 +28,7 @@ def _get_audit_log_path() -> str:
 
         if has_app_context() and current_app:
             return current_app.config.get("AUDIT_LOG_PATH", AUDIT_LOG_PATH)
-    except Exception:
+    except ImportError, RuntimeError:
         pass
     return os.environ.get("AUDIT_LOG_PATH", AUDIT_LOG_PATH)
 
@@ -66,9 +66,7 @@ def _sanitize_value(val: Any) -> Any:
         return _sanitize_string(val)
     if isinstance(val, dict):
         return {
-            k: _sanitize_value(v)
-            for k, v in val.items()
-            if not _is_sensitive_key(k)
+            k: _sanitize_value(v) for k, v in val.items() if not _is_sensitive_key(k)
         }
     if isinstance(val, (list, tuple, set)):
         return [_sanitize_value(item) for item in val]
@@ -76,13 +74,13 @@ def _sanitize_value(val: Any) -> Any:
 
 
 def log_event(
-    actor_id: Optional[str],
+    actor_id: str | None,
     action: str,
     resource: str,
     result: str,
-    extra: Optional[Dict[str, Any]] = None,
+    extra: dict[str, Any] | None = None,
     **kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Append 1 JSON line to AUDIT_LOG_PATH.
     Fields:
@@ -94,9 +92,9 @@ def log_event(
       - oldScore / newScore when updating score
     Guarantees no passwords or tokens are logged (A19).
     """
-    ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    ts = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
-    record: Dict[str, Any] = {
+    record: dict[str, Any] = {
         "ts": ts,
         "actorId": actor_id,
         "action": _sanitize_string(action),
@@ -105,7 +103,7 @@ def log_event(
     }
 
     # Merge extra and kwargs
-    merged_extra: Dict[str, Any] = {}
+    merged_extra: dict[str, Any] = {}
     if extra and isinstance(extra, dict):
         merged_extra.update(extra)
     if kwargs:

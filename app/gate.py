@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set, Tuple
+from typing import Any
 
 import jwt
 from flask import Flask, current_app, g, request
@@ -6,7 +6,7 @@ from flask import Flask, current_app, g, request
 from app.errors import Unauthenticated
 
 # Allowlist: ONLY POST /auth/login matches (method + path)
-ALLOWLIST: Set[Tuple[str, str]] = {
+ALLOWLIST: set[tuple[str, str]] = {
     ("POST", "/auth/login"),
 }
 
@@ -15,13 +15,10 @@ def is_allowlisted(method: str, path: str) -> bool:
     """Check if the request method and path are allowlisted."""
     if (method, path) in ALLOWLIST:
         return True
-    # Handle possible trailing slash on /auth/login/
-    if path.endswith("/") and (method, path.rstrip("/")) in ALLOWLIST:
-        return True
-    return False
+    return bool(path.endswith("/") and (method, path.rstrip("/")) in ALLOWLIST)
 
 
-def gate_before_request() -> Optional[Any]:
+def gate_before_request() -> Any | None:
     """
     Global before_request hook enforcing default-deny authentication (A16, A2).
 
@@ -54,8 +51,8 @@ def gate_before_request() -> Optional[Any]:
 
     try:
         payload = jwt.decode(token, secret, algorithms=["HS256"])
-    except (jwt.PyJWTError, Exception):
-        raise Unauthenticated()
+    except jwt.PyJWTError:
+        raise Unauthenticated() from None
 
     if not isinstance(payload, dict):
         raise Unauthenticated()

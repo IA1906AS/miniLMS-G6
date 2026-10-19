@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import jwt
@@ -18,10 +18,12 @@ SECRET = "s" * 32
 @pytest.fixture
 def app_with_gate(tmp_path):
     log_file = tmp_path / "test_audit.log"
-    app = create_app({
-        "JWT_SECRET": SECRET,
-        "AUDIT_LOG_PATH": str(log_file),
-    })
+    app = create_app(
+        {
+            "JWT_SECRET": SECRET,
+            "AUDIT_LOG_PATH": str(log_file),
+        }
+    )
     register_gate(app)
 
     # Register sample routes to test gate and guards
@@ -73,7 +75,7 @@ def client(app_with_gate):
 def make_token(sub: str, secret: str = SECRET, expires_in_seconds: int = 900) -> str:
     payload = {
         "sub": sub,
-        "exp": datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds),
+        "exp": datetime.now(UTC) + timedelta(seconds=expires_in_seconds),
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
@@ -81,6 +83,7 @@ def make_token(sub: str, secret: str = SECRET, expires_in_seconds: int = 900) ->
 # ==============================================================================
 # Requirement 1: app/gate.py tests
 # ==============================================================================
+
 
 def test_gate_allowlist_matches_post_auth_login_only():
     assert is_allowlisted("POST", "/auth/login")
@@ -207,6 +210,7 @@ def test_gate_returns_404_for_authenticated_unmatched_route(client):
 # Requirement 2: app/guards.py tests
 # ==============================================================================
 
+
 def test_require_role_permits_matching_role(client):
     token = make_token("u1")  # role: ADMIN
     res = client.get(
@@ -240,16 +244,18 @@ def test_require_role_denies_wrong_role_and_logs_403(app_with_gate, client):
 
 
 def test_require_role_supports_multiple_roles(client):
-    admin_token = make_token("u1")       # ADMIN
+    admin_token = make_token("u1")  # ADMIN
     instructor_token = make_token("u2")  # INSTRUCTOR
-    student_token = make_token("u4")     # STUDENT
+    student_token = make_token("u4")  # STUDENT
 
     # Admin passes
     r1 = client.get("/staff-only", headers={"Authorization": f"Bearer {admin_token}"})
     assert r1.status_code == 200
 
     # Instructor passes
-    r2 = client.get("/staff-only", headers={"Authorization": f"Bearer {instructor_token}"})
+    r2 = client.get(
+        "/staff-only", headers={"Authorization": f"Bearer {instructor_token}"}
+    )
     assert r2.status_code == 200
 
     # Student denied
@@ -261,6 +267,7 @@ def test_require_role_supports_multiple_roles(client):
 # ==============================================================================
 # Requirement 3: audit.py tests
 # ==============================================================================
+
 
 def test_audit_log_format_and_score_update(tmp_path):
     log_file = tmp_path / "audit_test.log"
@@ -282,7 +289,7 @@ def test_audit_log_format_and_score_update(tmp_path):
         assert entry["newScore"] == 8.0
 
         # Validate ISO 8601 timestamp
-        datetime.fromisoformat(entry["ts"].replace("Z", "+00:00"))
+        datetime.fromisoformat(entry["ts"])
 
         # Verify disk contents
         content = log_file.read_text(encoding="utf-8").strip()
