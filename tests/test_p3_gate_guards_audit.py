@@ -27,14 +27,6 @@ def app_with_gate(tmp_path):
     register_gate(app)
 
     # Register sample routes to test gate and guards
-    @app.post("/auth/login")
-    def login():
-        return {"status": "login_ok"}, 200
-
-    @app.get("/auth/login")
-    def get_login():
-        return {"status": "should_be_blocked_without_token"}, 200
-
     @app.get("/public-or-unregistered")
     def sample_route():
         return {"actor": g.actor}, 200
@@ -96,9 +88,12 @@ def test_gate_allowlist_matches_post_auth_login_only():
 
 
 def test_gate_allowlist_post_auth_login_bypasses_auth(client):
+    # Real login view rejects the empty body with INVALID_CREDENTIALS (401),
+    # which proves the gate allowlisted the request: a blocked request would
+    # get UNAUTHENTICATED instead.
     res = client.post("/auth/login")
-    assert res.status_code == 200
-    assert res.get_json() == {"status": "login_ok"}
+    assert res.status_code == 401
+    assert res.get_json() == {"error": "INVALID_CREDENTIALS"}
 
 
 def test_gate_blocks_get_auth_login_without_token(client):

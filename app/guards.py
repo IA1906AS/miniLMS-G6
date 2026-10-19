@@ -2,22 +2,16 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from flask import g, has_request_context, request
+from flask import g, has_request_context
 
 from app.errors import Forbidden
-
-try:
-    from audit import log_event
-except ImportError:
-    from app.audit import log_event
 
 
 def require_role(*roles: Any) -> Callable:
     """
     Route decorator requiring the authenticated actor to have one of the given roles.
-    Checks flask.g.actor["role"]. If not in allowed roles:
-      - Logs audit event via log_event(actor_id, action, resource, "FORBIDDEN")
-      - Raises Forbidden (403)
+    Checks flask.g.actor["role"]; wrong role raises Forbidden (403).
+    Audit logging of 403 happens centrally in the Forbidden error handler.
     """
     allowed_roles: set[str] = set()
     for r in roles:
@@ -33,14 +27,6 @@ def require_role(*roles: Any) -> Callable:
             role = actor.get("role") if isinstance(actor, dict) else None
 
             if role not in allowed_roles:
-                actor_id = actor.get("id") if isinstance(actor, dict) else None
-                action = request.method if has_request_context() else "ACCESS"
-                resource = (
-                    request.path
-                    if has_request_context()
-                    else getattr(fn, "__name__", "unknown")
-                )
-                log_event(actor_id, action, resource, "FORBIDDEN")
                 raise Forbidden()
 
             return fn(*args, **kwargs)

@@ -2,7 +2,11 @@ import os
 
 from flask import Flask
 
+from . import services
+from .auth import bp as auth_bp
 from .errors import register_error_handlers
+from .gate import register_gate
+from .routes import register_routes
 from .store import Store
 
 
@@ -21,7 +25,12 @@ def create_app(config=None):
         TOKEN_TTL_SECONDS=int(cfg.get("TOKEN_TTL_SECONDS", 900)),
         AUDIT_LOG_PATH=cfg.get("AUDIT_LOG_PATH", "audit.log"),
     )
-    app.extensions["store"] = Store()
+    store = Store()
+    app.extensions["store"] = store
+    services.configure_store(store)
 
+    app.register_blueprint(auth_bp)
+    register_gate(app)
+    register_routes(app)
     register_error_handlers(app)
     return app

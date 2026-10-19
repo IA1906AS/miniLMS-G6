@@ -6,7 +6,7 @@ import pytest
 from flask import g
 
 from app import create_app
-from app.auth import bp, create_token, verify_token
+from app.auth import create_token, verify_token
 from app.auth import me as me_view
 from app.errors import Unauthenticated
 
@@ -15,9 +15,7 @@ SECRET = "s" * 32
 
 @pytest.fixture
 def app():
-    application = create_app({"JWT_SECRET": SECRET})
-    application.register_blueprint(bp)
-    return application
+    return create_app({"JWT_SECRET": SECRET})
 
 
 @pytest.fixture
@@ -72,7 +70,6 @@ def test_a4_alg_none_rejected(app):
 
 def test_a5_expired_token_rejected():
     app = create_app({"JWT_SECRET": SECRET, "TOKEN_TTL_SECONDS": "1"})
-    app.register_blueprint(bp)
     with app.app_context():
         token = create_token("u4")
     time.sleep(2)
