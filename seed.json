@@ -1,0 +1,20 @@
+{
+  "users": [
+    { "id": "u1", "email": "admin@lms.test", "password": "Lms@2026", "role": "ADMIN" },
+    { "id": "u2", "email": "an.gv@lms.test", "password": "Lms@2026", "role": "INSTRUCTOR" },
+    { "id": "u3", "email": "binh.gv@lms.test", "password": "Lms@2026", "role": "INSTRUCTOR" },
+    { "id": "u4", "email": "chi.sv@lms.test", "password": "Lms@2026", "role": "STUDENT" },
+    { "id": "u5", "email": "dung.sv@lms.test", "password": "Lms@2026", "role": "STUDENT" },
+    { "id": "u6", "email": "em.sv@lms.test", "password": "Lms@2026", "role": "STUDENT" }
+  ],
+  "courses": [
+    { "id": "c1", "title": "Lập trình Web", "instructorId": "u2" },
+    { "id": "c2", "title": "Cơ sở dữ liệu", "instructorId": "u3" }
+  ],
+  "enrollments": [
+    { "courseId": "c1", "studentId": "u4", "score": 7.5 },
+    { "courseId": "c1", "studentId": "u5", "score": 8.0 },
+    { "courseId": "c2", "studentId": "u5", "score": 6.0 },
+    { "courseId": "c2", "studentId": "u6", "score": 9.0 }
+  ]
+}
