@@ -5,7 +5,10 @@ from flask import Flask, current_app, g, request
 
 from app.errors import Unauthenticated
 
-# Allowlist: ONLY POST /auth/login matches (method + path)
+# Only these browser shells/assets are public; data APIs still require JWT.
+PUBLIC_PAGES = {"/", "/home", "/account", "/static/app.css", "/static/app.js"}
+
+# API allowlist matches method + path.
 ALLOWLIST: set[tuple[str, str]] = {
     ("POST", "/auth/login"),
 }
@@ -22,14 +25,14 @@ def gate_before_request() -> Any | None:
     """
     Global before_request hook enforcing default-deny authentication (A16, A2).
 
-    1. Allowlist check: ONLY POST /auth/login bypasses authentication.
-    2. All other requests require Authorization: Bearer <token>.
+    1. Public HTML shells, exact UI assets and POST /auth/login bypass auth.
+    2. All data APIs and other requests require Authorization: Bearer <token>.
        - Missing, malformed, or expired token -> 401 UNAUTHENTICATED.
     3. Verify JWT using JWT_SECRET.
     4. Query store for user by sub. Non-existent -> 401 UNAUTHENTICATED.
     5. Assign actor (user dict) to flask.g.actor.
     """
-    if is_allowlisted(request.method, request.path):
+    if (request.method in {"GET", "HEAD"} and request.path in PUBLIC_PAGES) or is_allowlisted(request.method, request.path):
         g.actor = None
         return None
 
