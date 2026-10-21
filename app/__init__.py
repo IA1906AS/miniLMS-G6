@@ -3,9 +3,9 @@ import os
 from flask import Flask
 
 from . import services
-
 from .errors import register_error_handlers
 from .gate import register_gate
+from .pages import bp as pages_bp
 from .routes import register_routes
 from .store import Store
 
@@ -31,5 +31,6 @@ def create_app(config=None):
 
     register_gate(app)
     register_routes(app)
+    app.register_blueprint(pages_bp)
     register_error_handlers(app)
     return app
