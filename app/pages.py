@@ -21,17 +21,21 @@ def dashboard():
     if actor["role"] not in {"ADMIN", "INSTRUCTOR", "STUDENT"}:
         raise Forbidden()
 
+    # Dùng get_all_courses() để lấy một lần duy nhất từ DB
+    all_courses = store.get_all_courses()
+
     courses = []
-    for course in store.courses.values():
+    for course in all_courses:
         enrollment = store.get_enrollment(course["id"], actor["id"])
         if actor["role"] == "STUDENT" and enrollment is None:
             continue
         if actor["role"] == "INSTRUCTOR" and course["instructorId"] != actor["id"]:
             continue
+        instructor = store.get_user_by_id(course["instructorId"])
         courses.append({
             "id": course["id"],
             "title": course["title"],
-            "instructor": store.get_user_by_id(course["instructorId"])["email"],
+            "instructor": instructor["email"] if instructor else "",
             "score": enrollment["score"] if enrollment else None,
         })
     return {"courses": courses}

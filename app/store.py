@@ -1,75 +1,202 @@
-import json
-from pathlib import Path
+"""
+PostgreSQL-backed data store for miniLMS-G6.
 
-import bcrypt
+Provides the **same public interface** as the original in-memory Store
+so that auth.py, services.py, routes.py, pages.py, gate.py, etc.
+continue to work without any changes.
+"""
 
-SEED_PATH = Path(__file__).resolve().parent.parent / "seed.json"
+from app.database import get_connection, put_connection
 
 
 class Store:
-    def __init__(self):
-        with open(SEED_PATH, encoding="utf-8") as f:
-            seed = json.load(f)
+    """All queries go straight to PostgreSQL via psycopg2."""
 
-        self.users = {
-            u["id"]: {
-                "id": u["id"],
-                "email": u["email"],
-                "role": u["role"],
-                "password_hash": bcrypt.hashpw(
-                    u["password"].encode(), bcrypt.gensalt(rounds=10)
-                ),
-            }
-            for u in seed["users"]
-        }
-        self.courses = {c["id"]: c for c in seed["courses"]}
-        self.enrollments = list(seed["enrollments"])
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
 
-    def _public(self, u):
-        return {"id": u["id"], "email": u["email"], "role": u["role"]}
+    @staticmethod
+    def _public(row):
+        """Convert a (id, email, role) tuple to the public user dict."""
+        return {"id": row[0], "email": row[1], "role": row[2]}
+
+    # ------------------------------------------------------------------
+    # users
+    # ------------------------------------------------------------------
 
     def get_user_by_email(self, email):
-        for u in self.users.values():
-            if u["email"] == email:
-                return self._public(u)
-        return None
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, email, role FROM users WHERE email = %s",
+                    (email,),
+                )
+                row = cur.fetchone()
+                return self._public(row) if row else None
+        finally:
+            put_connection(conn)
 
     def get_user_by_id(self, uid):
-        u = self.users.get(uid)
-        return self._public(u) if u else None
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, email, role FROM users WHERE id = %s",
+                    (uid,),
+                )
+                row = cur.fetchone()
+                return self._public(row) if row else None
+        finally:
+            put_connection(conn)
 
     def get_password_hash_by_email(self, email):
-        for u in self.users.values():
-            if u["email"] == email:
-                return u["password_hash"]
-        return None
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT password_hash FROM users WHERE email = %s",
+                    (email,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                # password_hash is stored as TEXT (bcrypt ASCII);
+                # auth.py expects bytes for bcrypt.checkpw.
+                return row[0].encode("utf-8")
+        finally:
+            put_connection(conn)
+
+    # ------------------------------------------------------------------
+    # courses
+    # ------------------------------------------------------------------
+
+    @property
+    def courses(self):
+        """Dict of all courses keyed by id.
+
+        pages.py accesses ``store.courses.values()`` directly, so this
+        property keeps that contract intact.
+        """
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, title, instructor_id FROM courses")
+                return {
+                    row[0]: {
+                        "id": row[0],
+                        "title": row[1],
+                        "instructorId": row[2],
+                    }
+                    for row in cur.fetchall()
+                }
+        finally:
+            put_connection(conn)
 
     def course_exists(self, cid):
-        return cid in self.courses
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM courses WHERE id = %s", (cid,))
+                return cur.fetchone() is not None
+        finally:
+            put_connection(conn)
 
     def get_course(self, cid):
-        return self.courses.get(cid)
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, title, instructor_id FROM courses WHERE id = %s",
+                    (cid,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                return {"id": row[0], "title": row[1], "instructorId": row[2]}
+        finally:
+            put_connection(conn)
+
+    # ------------------------------------------------------------------
+    # enrollments
+    # ------------------------------------------------------------------
 
     def get_enrollment(self, cid, sid):
-        return next(
-            (e for e in self.enrollments if e["courseId"] == cid and e["studentId"] == sid),
-            None,
-        )
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT course_id, student_id, score "
+                    "FROM enrollments "
+                    "WHERE course_id = %s AND student_id = %s",
+                    (cid, sid),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                return {
+                    "courseId": row[0],
+                    "studentId": row[1],
+                    "score": float(row[2]) if row[2] is not None else None,
+                }
+        finally:
+            put_connection(conn)
 
     def get_grades(self, cid):
-        return [
-            {"studentId": e["studentId"], "score": e["score"]}
-            for e in self.enrollments
-            if e["courseId"] == cid
-        ]
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT student_id, score "
+                    "FROM enrollments "
+                    "WHERE course_id = %s",
+                    (cid,),
+                )
+                return [
+                    {
+                        "studentId": row[0],
+                        "score": float(row[1]) if row[1] is not None else None,
+                    }
+                    for row in cur.fetchall()
+                ]
+        finally:
+            put_connection(conn)
 
     def set_score(self, cid, sid, score):
-        e = self.get_enrollment(cid, sid)
-        if e is None:
-            return None
-        e["score"] = score
-        return e
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE enrollments SET score = %s "
+                    "WHERE course_id = %s AND student_id = %s "
+                    "RETURNING course_id, student_id, score",
+                    (score, cid, sid),
+                )
+                row = cur.fetchone()
+                conn.commit()
+                if row is None:
+                    return None
+                return {
+                    "courseId": row[0],
+                    "studentId": row[1],
+                    "score": float(row[2]) if row[2] is not None else None,
+                }
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            put_connection(conn)
 
     def is_instructor_of(self, uid, cid):
-        c = self.courses.get(cid)
-        return c is not None and c["instructorId"] == uid
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM courses "
+                    "WHERE id = %s AND instructor_id = %s",
+                    (cid, uid),
+                )
+                return cur.fetchone() is not None
+        finally:
+            put_connection(conn)
