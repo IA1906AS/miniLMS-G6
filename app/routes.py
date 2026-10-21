@@ -16,7 +16,7 @@ def register_routes(app):
         return jsonify(rows), 200
 
     @app.put("/courses/<course_id>/grades/<student_id>")
-    @require_role("ADMIN", "INSTRUCTOR")
+    @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
     def put_course_grade(course_id, student_id):
         store = current_app.extensions["store"]
         old_score, new_score = services.update_grade(

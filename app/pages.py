@@ -2,6 +2,8 @@
 
 from flask import Blueprint, current_app, g, render_template
 
+from app.errors import Forbidden
+
 bp = Blueprint("pages", __name__)
 
 
@@ -16,6 +18,9 @@ def index():
 def dashboard():
     store = current_app.extensions["store"]
     actor = g.actor
+    if actor["role"] not in {"ADMIN", "INSTRUCTOR", "STUDENT"}:
+        raise Forbidden()
+
     courses = []
     for course in store.courses.values():
         enrollment = store.get_enrollment(course["id"], actor["id"])
