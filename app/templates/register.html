@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Tạo tài khoản · MiniLMS{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">{% endblock %}
+{% block form_content %}
+<div class="form-wrap">
+  <div class="mobile-brand"><span class="brand-mark">M</span> MiniLMS</div>
+  <p class="eyebrow">Bắt đầu miễn phí</p>
+  <h2>Tạo tài khoản mới</h2>
+  <p class="subtext">Tham gia MiniLMS và bắt đầu học ngay hôm nay.</p>
+  <form id="auth-form" data-mode="register" novalidate>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+    <label for="password">Mật khẩu</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" placeholder="Tối thiểu 8 ký tự" required>
+    <label for="passwordConfirmation">Nhập lại mật khẩu</label>
+    <input id="passwordConfirmation" name="passwordConfirmation" type="password" autocomplete="new-password" placeholder="Nhập lại mật khẩu" required>
+    <p id="form-message" class="message" role="alert" aria-live="polite"></p>
+    <button type="submit">Tạo tài khoản <span aria-hidden="true">→</span></button>
+  </form>
+  <p class="switch">Đã có tài khoản? <a href="{{ url_for('login_page') }}">Đăng nhập</a></p>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/auth.js') }}" defer></script>{% endblock %}

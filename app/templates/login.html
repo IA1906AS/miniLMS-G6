@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập · MiniLMS{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">{% endblock %}
+{% block form_content %}
+<div class="form-wrap">
+  <div class="mobile-brand"><span class="brand-mark">M</span> MiniLMS</div>
+  <p class="eyebrow">Chào mừng trở lại</p>
+  <h2>Đăng nhập tài khoản</h2>
+  <p class="subtext">Tiếp tục hành trình học tập của bạn.</p>
+  <form id="auth-form" data-mode="login" novalidate>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+    <label for="password">Mật khẩu</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Mật khẩu của bạn" required>
+    <p id="form-message" class="message" role="alert" aria-live="polite"></p>
+    <button type="submit">Đăng nhập <span aria-hidden="true">→</span></button>
+  </form>
+  <p class="switch">Chưa có tài khoản? <a href="{{ url_for('register_page') }}">Đăng ký ngay</a></p>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/auth.js') }}" defer></script>{% endblock %}

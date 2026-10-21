@@ -5,12 +5,23 @@ from flask import Flask, current_app, g, request
 
 from app.errors import Unauthenticated
 
-# Only these browser shells/assets are public; data APIs still require JWT.
-PUBLIC_PAGES = {"/", "/home", "/account", "/static/app.css", "/static/app.js"}
+# Browser pages and their exact assets are public; data APIs remain protected.
+PUBLIC_PAGES = {
+    "/",
+    "/home",
+    "/account",
+    "/login",
+    "/register",
+    "/static/app.css",
+    "/static/app.js",
+    "/static/css/base.css",
+    "/static/css/auth.css",
+    "/static/js/auth.js",
+}
 
-# API allowlist matches method + path.
 ALLOWLIST: set[tuple[str, str]] = {
     ("POST", "/auth/login"),
+    ("POST", "/auth/register"),
 }
 
 
@@ -22,17 +33,10 @@ def is_allowlisted(method: str, path: str) -> bool:
 
 
 def gate_before_request() -> Any | None:
-    """
-    Global before_request hook enforcing default-deny authentication (A16, A2).
-
-    1. Public HTML shells, exact UI assets and POST /auth/login bypass auth.
-    2. All data APIs and other requests require Authorization: Bearer <token>.
-       - Missing, malformed, or expired token -> 401 UNAUTHENTICATED.
-    3. Verify JWT using JWT_SECRET.
-    4. Query store for user by sub. Non-existent -> 401 UNAUTHENTICATED.
-    5. Assign actor (user dict) to flask.g.actor.
-    """
-    if (request.method in {"GET", "HEAD"} and request.path in PUBLIC_PAGES) or is_allowlisted(request.method, request.path):
+    """Apply default-deny authentication to every non-public request."""
+    if (request.method in {"GET", "HEAD"} and request.path in PUBLIC_PAGES) or is_allowlisted(
+        request.method, request.path
+    ):
         g.actor = None
         return None
 
@@ -45,11 +49,8 @@ def gate_before_request() -> Any | None:
         raise Unauthenticated()
 
     token = parts[1].strip()
-    if not token:
-        raise Unauthenticated()
-
     secret = current_app.config.get("JWT_SECRET")
-    if not secret:
+    if not token or not secret:
         raise Unauthenticated()
 
     try:
@@ -57,18 +58,11 @@ def gate_before_request() -> Any | None:
     except jwt.PyJWTError:
         raise Unauthenticated() from None
 
-    if not isinstance(payload, dict):
-        raise Unauthenticated()
-
-    sub = payload.get("sub")
-    if not sub:
+    if not isinstance(payload, dict) or not payload.get("sub"):
         raise Unauthenticated()
 
     store = current_app.extensions.get("store")
-    if store is None:
-        raise Unauthenticated()
-
-    user = store.get_user_by_id(sub)
+    user = store.get_user_by_id(payload["sub"]) if store else None
     if not user:
         raise Unauthenticated()
 
@@ -77,17 +71,13 @@ def gate_before_request() -> Any | None:
 
 
 def register_gate(app: Flask) -> None:
-    """
-    Hook for P1 to register before_request into create_app.
-    Safe against multiple registrations.
-    """
+    """Register the default-deny hook once."""
     if getattr(app, "_gate_registered", False):
         return
     app._gate_registered = True
     app.before_request(gate_before_request)
 
 
-# Aliases for hook registration
 init_app = register_gate
 init_gate = register_gate
 gate_hook = register_gate
