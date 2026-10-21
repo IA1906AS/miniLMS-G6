@@ -3,12 +3,11 @@ import os
 from flask import Flask
 
 from . import services
-from .auth import bp as auth_bp
 from .errors import register_error_handlers
 from .gate import register_gate
+from .pages import bp as pages_bp
 from .routes import register_routes
 from .store import Store
-from .pages import bp as pages_bp
 
 
 def create_app(config=None):
@@ -30,9 +29,8 @@ def create_app(config=None):
     app.extensions["store"] = store
     services.configure_store(store)
 
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(pages_bp)
     register_gate(app)
     register_routes(app)
+    app.register_blueprint(pages_bp)
     register_error_handlers(app)
     return app

@@ -2,11 +2,9 @@ import time
 
 import bcrypt
 import jwt
-from flask import Blueprint, current_app, g, request
+from flask import current_app, g
 
 from .errors import AccountLocked, InvalidCredentials, Unauthenticated
-
-bp = Blueprint("auth", __name__)
 
 LOCK_THRESHOLD = 5
 LOCK_SECONDS = 15 * 60
@@ -67,33 +65,6 @@ def verify_token(token):
     return sub
 
 
-@bp.post("/auth/login")
-def login():
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or "email" not in data or "password" not in data:
-        raise InvalidCredentials()
-
-    email, password = data["email"], data["password"]
-    if _is_locked(email):
-        raise AccountLocked()
-
-    store = current_app.extensions["store"]
-    user = store.get_user_by_email(email)
-    pw_hash = store.get_password_hash_by_email(email) or _DUMMY_HASH
-    ok = isinstance(password, str) and bcrypt.checkpw(password.encode(), pw_hash)
-
-    if user is None or not ok:
-        _record_failure(email)
-        raise InvalidCredentials()
-
-    _failures().pop(email, None)
-    return {
-        "accessToken": create_token(user["id"]),
-        "expiresIn": int(current_app.config["TOKEN_TTL_SECONDS"]),
-    }, 200
-
-
-@bp.get("/me")
 def me():
     actor = getattr(g, "actor", None)
     if actor is None:
