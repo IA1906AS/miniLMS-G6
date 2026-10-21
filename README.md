@@ -15,12 +15,12 @@ export JWT_SECRET="$(.venv/bin/python -c 'import secrets; print(secrets.token_he
 .venv/bin/flask --app app:create_app run --host 0.0.0.0 --port 5000
 ```
 
-Trước khi chạy `migrate.py`, tạo database PostgreSQL tên `minilms` (hoặc tên khác trong `DB_NAME`) và cấu hình kết nối trong file `.env` ở thư mục gốc:
+Trước khi chạy `migrate.py`, tạo database PostgreSQL tên `minilms_g6` (hoặc tên khác trong `DB_NAME`) và cấu hình kết nối trong file `.env` ở thư mục gốc:
 
 ```dotenv
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=minilms
+DB_NAME=minilms_g6
 DB_USER=postgres
 DB_PASSWORD=your_local_password
 ```

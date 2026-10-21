@@ -78,7 +78,7 @@ def _dsn() -> str:
         return url
     host = os.getenv("DB_HOST", "localhost")
     port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "minilms")
+    name = os.getenv("DB_NAME", "minilms_g6")
     user = os.getenv("DB_USER", "postgres")
     pw   = os.getenv("DB_PASSWORD", "")
     return f"host={host} port={port} dbname={name} user={user} password={pw}"

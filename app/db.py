@@ -38,7 +38,7 @@ def _connection_args(cfg: dict) -> dict:
     return {
         "host": cfg.get("DB_HOST", "localhost"),
         "port": int(cfg.get("DB_PORT", "5432")),
-        "dbname": cfg.get("DB_NAME", "minilms"),
+        "dbname": cfg.get("DB_NAME", "minilms_g6"),
         "user": cfg.get("DB_USER", "postgres"),
         "password": cfg.get("DB_PASSWORD", ""),
     }
