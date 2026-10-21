@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1b5146">
+  <title>miniLMS · Không gian học tập</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/home"><span class="brand-icon">m<span>↗</span></span>miniLMS<span class="brand-dot">.</span></a>
+    <p class="nav-label">KHÔNG GIAN CỦA BẠN</p>
+    <nav aria-label="Điều hướng chính">
+      <a href="/home" data-page="home"><span aria-hidden="true">▦</span> Trang chủ <span class="nav-arrow">↗</span></a>
+      <a href="/account" data-page="account"><span aria-hidden="true">◎</span> Tài khoản <span class="nav-arrow">↗</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="note-symbol">✳</span><h3>Mỗi ngày, tiến một bước.</h3><p>Kiến thức hôm nay là nền tảng cho ngày mai.</p><a href="/home#courses">Khám phá việc học <span>↗</span></a></div>
+    <div class="sidebar-bottom"><span class="status-dot"></span> miniLMS / Nhóm 6 <small>LEARN. GROW. REPEAT.</small></div>
+  </aside>
+  <div class="workspace">
+    <header><span class="breadcrumb">Không gian học tập <span>/</span> <strong id="breadcrumb">Trang chủ</strong></span><a class="header-account" href="/account"><span id="header-name">Tài khoản của bạn</span><span class="avatar small" id="header-avatar">M</span></a></header>
+    <main>
+      <section id="home-page">
+        <div class="page-heading"><div><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Học điều mới. <span>Đi xa hơn.</span></h1><p>Một nơi để theo dõi hành trình và kết nối với kiến thức.</p></div><span class="edition">miniLMS <b>G6</b></span></div>
+        <div class="hero"><div class="hero-content"><span class="hero-tag"><span class="status-dot"></span> SẴN SÀNG CHO BƯỚC TIẾP THEO</span><h2>Đầu tư cho tri thức,<br>mở lối tương lai.</h2><p>Quản lý khóa học và theo dõi kết quả của bạn.<br>Tất cả trong một không gian đơn giản.</p><a href="#courses" class="button cream">Đến khóa học của bạn <span>↗</span></a></div><div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="art-star">✳</div><div class="art-label">A LITTLE PROGRESS,<br>EVERY DAY.</div><div class="art-card"><span>↗</span><b>Không ngừng<br>phát triển</b></div></div></div>
+        <div class="stats"><article><span class="stat-icon">▤</span><div><p>Khóa học của bạn</p><strong id="course-count">—</strong></div><small>KHÔNG GIAN KIẾN THỨC</small></article><article><span class="stat-icon peach">↗</span><div><p>Điểm trung bình</p><strong id="average">—</strong></div><small>THANG ĐIỂM 10</small></article><article><span class="stat-icon lavender">◎</span><div><p>Vai trò của bạn</p><strong class="role-stat" id="role-stat">Khách</strong></div><small id="session-caption">ĐĂNG NHẬP ĐỂ BẮT ĐẦU</small></article></div>
+        <section id="courses"><div class="section-heading"><div><p class="eyebrow">KEEP MOVING FORWARD</p><h2>Khóa học của bạn</h2></div><span class="pill" id="course-pill">Không gian học tập</span></div><p id="home-message" class="message" role="status"></p><div id="course-grid" class="course-grid"></div></section>
+        <div class="bottom-note"><span>✦</span><p>Không cần hoàn hảo, chỉ cần tiếp tục.<small>Hành trình học tập bắt đầu từ chính bạn.</small></p><a href="/account">Tài khoản của tôi ↗</a></div>
+      </section>
+      <section id="account-page" hidden>
+        <div class="page-heading"><div><p class="eyebrow">YOUR PERSONAL SPACE</p><h1>Tài khoản <span>của bạn.</span></h1><p>Quản lý phiên đăng nhập và thông tin học tập.</p></div></div>
+        <div class="account-layout"><aside class="profile-card"><div class="avatar large" id="profile-avatar">M</div><span class="pill" id="profile-role">Chào mừng bạn</span><h2 id="profile-title">Cùng bắt đầu nhé.</h2><p id="profile-description">Đăng nhập để mở không gian học tập của riêng bạn.</p><div class="profile-decoration" aria-hidden="true">✳</div></aside><div class="account-panel"><div id="login-panel"><p class="eyebrow">WELCOME BACK</p><h2>Đăng nhập miniLMS</h2><p>Sử dụng tài khoản được nhà trường cung cấp.</p><form id="login-form"><label for="email">Địa chỉ email</label><input id="email" name="email" type="email" autocomplete="username" placeholder="ban@lms.test" required maxlength="254"><label for="password">Mật khẩu</label><div class="password-field"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu của bạn" required><button type="button" id="toggle-password" aria-label="Hiện mật khẩu">Hiện</button></div><button type="submit" class="button green" id="login-button">Đăng nhập <span>↗</span></button></form><p class="account-hint">Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên của bạn.</p></div><div id="profile-panel" hidden><p class="eyebrow">ACCOUNT OVERVIEW</p><h2>Thông tin tài khoản</h2><p>Thông tin được quản lý bởi nhà trường.</p><dl><div><dt>Email</dt><dd id="profile-email"></dd></div><div><dt>Mã tài khoản</dt><dd id="profile-id"></dd></div><div><dt>Vai trò</dt><dd id="profile-role-detail"></dd></div><div><dt>Trạng thái phiên</dt><dd><span class="status-dot"></span> Đã đăng nhập</dd></div></dl><button id="logout" class="button outline">Đăng xuất <span>↗</span></button></div><p id="account-message" class="message" role="status" aria-live="polite"></p></div></div>
+      </section>
+    </main>
+    <footer><span>© miniLMS · Nhóm 6</span><span>Không gian nhỏ. Kiến thức lớn. <b>↗</b></span></footer>
+  </div>
+</body>
+</html>
