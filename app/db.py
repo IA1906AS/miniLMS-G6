@@ -9,36 +9,39 @@ Cách dùng:
 
 from __future__ import annotations
 
+import atexit
 import os
 from contextlib import contextmanager
 from typing import Generator
 
 import psycopg2
+from dotenv import load_dotenv
 from psycopg2 import pool as pg_pool
 from psycopg2.extras import RealDictCursor
 
+load_dotenv()
+
 # Module-level pool singleton — được tạo một lần khi app khởi động.
-_pool: pg_pool.SimpleConnectionPool | None = None
+_pool: pg_pool.ThreadedConnectionPool | None = None
 
 
-def _dsn_from_env(cfg: dict) -> str:
+def _connection_args(cfg: dict) -> dict:
     """
-    Xây dựng DSN (Data Source Name) từ biến môi trường.
+    Tạo tham số kết nối từ cấu hình môi trường.
 
     Ưu tiên DATABASE_URL nếu có; nếu không, ghép từ các biến riêng lẻ:
       DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD.
     """
     url = cfg.get("DATABASE_URL")
     if url:
-        return url
-
-    host = cfg.get("DB_HOST", "localhost")
-    port = cfg.get("DB_PORT", "5432")
-    name = cfg.get("DB_NAME", "minilms")
-    user = cfg.get("DB_USER", "postgres")
-    password = cfg.get("DB_PASSWORD", "")
-
-    return f"host={host} port={port} dbname={name} user={user} password={password}"
+        return {"dsn": url}
+    return {
+        "host": cfg.get("DB_HOST", "localhost"),
+        "port": int(cfg.get("DB_PORT", "5432")),
+        "dbname": cfg.get("DB_NAME", "minilms"),
+        "user": cfg.get("DB_USER", "postgres"),
+        "password": cfg.get("DB_PASSWORD", ""),
+    }
 
 
 def init_pool(cfg: dict | None = None, minconn: int = 1, maxconn: int = 10) -> None:
@@ -55,14 +58,13 @@ def init_pool(cfg: dict | None = None, minconn: int = 1, maxconn: int = 10) -> N
     if _pool is not None:
         return  # đã được khởi tạo
 
-    env = cfg if cfg is not None else dict(os.environ)
-    dsn = _dsn_from_env(env)
-
-    _pool = pg_pool.SimpleConnectionPool(
+    env = cfg if cfg is not None else os.environ
+    _pool = pg_pool.ThreadedConnectionPool(
         minconn=minconn,
         maxconn=maxconn,
-        dsn=dsn,
+        **_connection_args(env),
     )
+    atexit.register(close_pool)
 
 
 def close_pool() -> None:
