@@ -44,6 +44,19 @@ class Store:
                 return u["password_hash"]
         return None
 
+    def create_user(self, email, password, role="STUDENT"):
+        if self.get_user_by_email(email) is not None:
+            return None
+        user_id = f"u{len(self.users) + 1}"
+        user = {
+            "id": user_id,
+            "email": email,
+            "role": role,
+            "password_hash": bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=10)),
+        }
+        self.users[user_id] = user
+        return self._public(user)
+
     def course_exists(self, cid):
         return cid in self.courses
 

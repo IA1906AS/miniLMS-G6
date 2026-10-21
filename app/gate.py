@@ -5,9 +5,15 @@ from flask import Flask, current_app, g, request
 
 from app.errors import Unauthenticated
 
-# Allowlist: ONLY POST /auth/login matches (method + path)
+# Public pages and authentication actions are intentionally allowlisted.
 ALLOWLIST: set[tuple[str, str]] = {
+    ("GET", "/login"),
+    ("GET", "/register"),
+    ("GET", "/static/css/base.css"),
+    ("GET", "/static/css/auth.css"),
+    ("GET", "/static/js/auth.js"),
     ("POST", "/auth/login"),
+    ("POST", "/auth/register"),
 }
 
 
