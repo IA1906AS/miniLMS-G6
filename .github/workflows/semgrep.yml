@@ -23,7 +23,7 @@ jobs:
     steps:
       # Bước 1: Checkout mã nguồn của dự án
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # Bước 2: Chạy Semgrep OSS Scan
       - name: Run Semgrep OSS
@@ -33,7 +33,7 @@ jobs:
 
       # Bước 3: Đẩy kết quả quét lên tab Security/Code Scanning của GitHub
       - name: Upload SARIF file to GitHub Security Tabs
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dba2a0dbe8438a052e5b7c0ec07da6
         with:
           sarif_file: semgrep-results.sarif
         if: always() 
