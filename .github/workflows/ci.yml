@@ -4,9 +4,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # Sửa dòng 7: Thay thế @v4 bằng mã SHA cố định
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      
+      # Sửa dòng 8: Thay thế @v5 bằng mã SHA cố định
+      - uses: actions/setup-python@0b93645e9eed0ee424de7e37d5de83d98d734dd1
         with:
           python-version: "3.11"
+          
       - run: pip install -r requirements.txt pytest
       - run: pytest
