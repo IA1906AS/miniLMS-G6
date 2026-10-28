@@ -4,7 +4,7 @@ Backend Flask và giao diện Home / Account bằng tiếng Việt, hỗ trợ d
 
 ## Chạy cục bộ
 
-Dùng Python 3.11+ cho ứng dụng Flask (CI dùng 3.11; cấu hình `uv` của kho mã yêu cầu 3.14).
+Dùng Python 3.12 cho ứng dụng Flask (CI và cấu hình `uv` đều dùng 3.12).
 
 ```bash
 cd /workspace/miniLMS-G6
