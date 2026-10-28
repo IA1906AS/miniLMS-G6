@@ -4,7 +4,7 @@ store_pg.py – PostgreSQL implementation của Store interface.
 Cung cấp cùng interface như store.py (Store cũ dùng seed.json)
 nhưng mọi thao tác đọc/ghi đều qua PostgreSQL thông qua db.py.
 
-Các bảng cần tồn tại (xem migrate.py):
+Các bảng cần tồn tại (xem db_init.py):
     users, courses, enrollments
 """
 
