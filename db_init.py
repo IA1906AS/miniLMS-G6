@@ -46,6 +46,12 @@ CREATE TABLE IF NOT EXISTS enrollments (
     score      NUMERIC(4,1),
     PRIMARY KEY (course_id, student_id)
 );
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    email      VARCHAR(255) PRIMARY KEY,
+    otp_hash   TEXT        NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL
+);
 """
 
 

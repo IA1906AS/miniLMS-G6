@@ -47,6 +47,7 @@ def seed_db():
     try:
         with conn.cursor() as cur:
             # Clear in reverse FK order
+            cur.execute("DELETE FROM password_resets")
             cur.execute("DELETE FROM enrollments")
             cur.execute("DELETE FROM courses")
             cur.execute("DELETE FROM users")
