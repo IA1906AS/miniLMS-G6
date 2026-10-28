@@ -174,7 +174,8 @@ class PgStore:
             with get_cursor(conn) as cur:
                 cur.execute(
                     """
-                    SELECT course_id AS "courseId", student_id AS "studentId", score
+                    SELECT course_id AS "courseId", student_id AS "studentId",
+                           score::float8 AS score
                     FROM enrollments
                     WHERE course_id = %s AND student_id = %s
                     LIMIT 1
@@ -190,7 +191,7 @@ class PgStore:
             with get_cursor(conn) as cur:
                 cur.execute(
                     """
-                    SELECT student_id AS "studentId", score
+                    SELECT student_id AS "studentId", score::float8 AS score
                     FROM enrollments
                     WHERE course_id = %s
                     ORDER BY student_id
@@ -214,7 +215,8 @@ class PgStore:
                     UPDATE enrollments
                     SET score = %s
                     WHERE course_id = %s AND student_id = %s
-                    RETURNING course_id AS "courseId", student_id AS "studentId", score
+                    RETURNING course_id AS "courseId", student_id AS "studentId",
+                              score::float8 AS score
                     """,
                     (score, cid, sid),
                 )
