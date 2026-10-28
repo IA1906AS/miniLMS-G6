@@ -116,9 +116,54 @@ class PgStore:
             with get_cursor(conn) as cur:
                 cur.execute(
                     "UPDATE users SET password_hash = %s WHERE id = %s",
-                    (pw_hash, uid),
+                    (pw_hash.decode("utf-8"), uid),
                 )
                 return cur.rowcount > 0
+
+    # ------------------------------------------------------------------ #
+    #  Password reset OTP                                                  #
+    # ------------------------------------------------------------------ #
+
+    def purge_expired_reset_otps(self) -> None:
+        """Xoá mọi OTP đã hết hạn (5 phút theo thiết kế)."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute("DELETE FROM password_resets WHERE expires_at <= NOW()")
+
+    def save_reset_otp(self, email: str, otp_hash: bytes, ttl_seconds: int) -> None:
+        """Lưu (ghi đè) OTP reset cho email, hết hạn sau ttl_seconds."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO password_resets (email, otp_hash, expires_at)
+                    VALUES (%s, %s, NOW() + make_interval(secs => %s))
+                    ON CONFLICT (email) DO UPDATE
+                    SET otp_hash = EXCLUDED.otp_hash,
+                        expires_at = EXCLUDED.expires_at
+                    """,
+                    (email, otp_hash.decode("utf-8"), ttl_seconds),
+                )
+
+    def get_reset_otp_hash(self, email: str) -> bytes | None:
+        """Trả về otp_hash còn hiệu lực, hoặc None."""
+        self.purge_expired_reset_otps()
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    "SELECT otp_hash FROM password_resets WHERE email = %s",
+                    (email,),
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        val = row["otp_hash"]
+        return val.encode("utf-8") if isinstance(val, str) else bytes(val)
+
+    def delete_reset_otp(self, email: str) -> None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute("DELETE FROM password_resets WHERE email = %s", (email,))
 
     # ------------------------------------------------------------------ #
     #  Course queries                                                      #

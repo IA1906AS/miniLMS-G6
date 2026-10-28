@@ -22,6 +22,8 @@ PUBLIC_PAGES = {
 ALLOWLIST: set[tuple[str, str]] = {
     ("POST", "/auth/login"),
     ("POST", "/auth/register"),
+    ("POST", "/auth/forgot-password"),
+    ("POST", "/auth/reset-password"),
 }
 
 
