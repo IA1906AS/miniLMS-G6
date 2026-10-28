@@ -116,7 +116,7 @@ class PgStore:
             with get_cursor(conn) as cur:
                 cur.execute(
                     "UPDATE users SET password_hash = %s WHERE id = %s",
-                    (pw_hash, uid),
+                    (pw_hash.decode("utf-8"), uid),
                 )
                 return cur.rowcount > 0
 
