@@ -33,7 +33,7 @@ jobs:
 
       # Bước 3: Đẩy kết quả quét lên tab Security/Code Scanning của GitHub
       - name: Upload SARIF file to GitHub Security Tabs
-        uses: github/codeql-action/upload-sarif@48ab28a6f5dba2a0dbe8438a052e5b7c0ec07da6
+        uses: github/codeql-action/upload-sarif@f1f6e5f6af878fb37288ce1c627459e94dbf7d01
         with:
           sarif_file: semgrep-results.sarif
         if: always() 

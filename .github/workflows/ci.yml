@@ -3,14 +3,39 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: minilms_g6
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: minilms_g6
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+
     steps:
-      # Sửa dòng 7: Thay thế @v4 bằng mã SHA cố định
+      # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      
-      # Sửa dòng 8: Thay thế @v5 bằng mã SHA cố định
-      - uses: actions/setup-python@0b93645e9eed0ee424de7e37d5de83d98d734dd1
+
+      # actions/setup-python v5.4.0
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
           python-version: "3.11"
-          
+
       - run: pip install -r requirements.txt pytest
+      - run: python db_init.py
+      - run: python db_seed.py
       - run: pytest

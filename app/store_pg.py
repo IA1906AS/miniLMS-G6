@@ -70,7 +70,9 @@ class PgStore:
         if row is None:
             return None
         val = row["password_hash"]
-        # psycopg2 trả về memoryview hoặc bytes tùy version — chuẩn hoá thành bytes
+        # Cột TEXT → psycopg2 trả về str; chuẩn hoá thành bytes cho bcrypt.checkpw
+        if isinstance(val, str):
+            return val.encode("utf-8")
         return bytes(val) if isinstance(val, (memoryview, bytearray)) else val
 
     def create_user(
@@ -172,7 +174,8 @@ class PgStore:
             with get_cursor(conn) as cur:
                 cur.execute(
                     """
-                    SELECT course_id AS "courseId", student_id AS "studentId", score
+                    SELECT course_id AS "courseId", student_id AS "studentId",
+                           score::float8 AS score
                     FROM enrollments
                     WHERE course_id = %s AND student_id = %s
                     LIMIT 1
@@ -188,7 +191,7 @@ class PgStore:
             with get_cursor(conn) as cur:
                 cur.execute(
                     """
-                    SELECT student_id AS "studentId", score
+                    SELECT student_id AS "studentId", score::float8 AS score
                     FROM enrollments
                     WHERE course_id = %s
                     ORDER BY student_id
@@ -212,7 +215,8 @@ class PgStore:
                     UPDATE enrollments
                     SET score = %s
                     WHERE course_id = %s AND student_id = %s
-                    RETURNING course_id AS "courseId", student_id AS "studentId", score
+                    RETURNING course_id AS "courseId", student_id AS "studentId",
+                              score::float8 AS score
                     """,
                     (score, cid, sid),
                 )
