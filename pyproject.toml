@@ -3,10 +3,7 @@ name = "minilms-g6"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-authors = [
-    { name = "nam081105", email = "nampham.081105@gmail.com" }
-]
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "bcrypt>=4.0",
     "flask>=3.0,<4",
