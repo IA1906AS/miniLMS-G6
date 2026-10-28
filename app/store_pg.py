@@ -70,7 +70,9 @@ class PgStore:
         if row is None:
             return None
         val = row["password_hash"]
-        # psycopg2 trả về memoryview hoặc bytes tùy version — chuẩn hoá thành bytes
+        # Cột TEXT → psycopg2 trả về str; chuẩn hoá thành bytes cho bcrypt.checkpw
+        if isinstance(val, str):
+            return val.encode("utf-8")
         return bytes(val) if isinstance(val, (memoryview, bytearray)) else val
 
     def create_user(
