@@ -13,6 +13,7 @@ from __future__ import annotations
 import bcrypt
 
 from .db import get_conn, get_cursor
+from .errors import Conflict
 
 
 class PgStore:
@@ -214,13 +215,13 @@ class PgStore:
     # ------------------------------------------------------------------ #
 
     def get_enrollment(self, cid: str, sid: str) -> dict | None:
-        """Trả về enrollment (courseId, studentId, score) hoặc None."""
+        """Trả về enrollment (courseId, studentId, score, version) hoặc None."""
         with get_conn() as conn:
             with get_cursor(conn) as cur:
                 cur.execute(
                     """
                     SELECT course_id AS "courseId", student_id AS "studentId",
-                           score::float8 AS score
+                           score::float8 AS score, version
                     FROM enrollments
                     WHERE course_id = %s AND student_id = %s
                     LIMIT 1
@@ -230,43 +231,85 @@ class PgStore:
                 row = cur.fetchone()
         return dict(row) if row else None
 
-    def get_grades(self, cid: str) -> list[dict]:
-        """Trả về danh sách {studentId, score} của khoá học."""
+    def get_grades(self, cid: str, include_version: bool = False) -> list[dict]:
+        """Trả về danh sách {studentId, score[, version]} của khoá học."""
         with get_conn() as conn:
             with get_cursor(conn) as cur:
-                cur.execute(
-                    """
-                    SELECT student_id AS "studentId", score::float8 AS score
-                    FROM enrollments
-                    WHERE course_id = %s
-                    ORDER BY student_id
-                    """,
-                    (cid,),
-                )
+                if include_version:
+                    cur.execute(
+                        """
+                        SELECT student_id AS "studentId", score::float8 AS score, version
+                        FROM enrollments
+                        WHERE course_id = %s
+                        ORDER BY student_id
+                        """,
+                        (cid,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT student_id AS "studentId", score::float8 AS score
+                        FROM enrollments
+                        WHERE course_id = %s
+                        ORDER BY student_id
+                        """,
+                        (cid,),
+                    )
                 rows = cur.fetchall()
         return [dict(r) for r in rows]
 
-    def set_score(self, cid: str, sid: str, score: float) -> dict | None:
+    def set_score(
+        self,
+        cid: str,
+        sid: str,
+        score: float,
+        version: int | None = None,
+    ) -> dict | None:
         """
         Cập nhật điểm của sinh viên trong khoá học.
 
-        Returns:
-            dict enrollment đã cập nhật, hoặc None nếu không tìm thấy.
+        Khi truyền version (Optimistic Locking):
+            UPDATE enrollments SET score = %s, version = version + 1
+            WHERE course_id = %s AND student_id = %s AND version = %s
+        Nếu rowcount = 0 thì ném Conflict (HTTP 409).
         """
         with get_conn() as conn:
             with get_cursor(conn) as cur:
-                cur.execute(
-                    """
-                    UPDATE enrollments
-                    SET score = %s
-                    WHERE course_id = %s AND student_id = %s
-                    RETURNING course_id AS "courseId", student_id AS "studentId",
-                              score::float8 AS score
-                    """,
-                    (score, cid, sid),
-                )
-                row = cur.fetchone()
-        return dict(row) if row else None
+                if version is not None:
+                    cur.execute(
+                        """
+                        UPDATE enrollments
+                        SET score = %s, version = version + 1
+                        WHERE course_id = %s AND student_id = %s AND version = %s
+                        RETURNING course_id AS "courseId", student_id AS "studentId",
+                                  score::float8 AS score, version
+                        """,
+                        (score, cid, sid, version),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        # Phân biệt giữa 404 (không tìm thấy enrollment) và 409 (xung đột version)
+                        cur.execute(
+                            "SELECT 1 FROM enrollments WHERE course_id = %s AND student_id = %s",
+                            (cid, sid),
+                        )
+                        if cur.fetchone() is None:
+                            return None
+                        raise Conflict("Điểm đã bị thay đổi bởi người khác, vui lòng tải lại")
+                    return dict(row)
+                else:
+                    cur.execute(
+                        """
+                        UPDATE enrollments
+                        SET score = %s, version = version + 1
+                        WHERE course_id = %s AND student_id = %s
+                        RETURNING course_id AS "courseId", student_id AS "studentId",
+                                  score::float8 AS score, version
+                        """,
+                        (score, cid, sid),
+                    )
+                    row = cur.fetchone()
+                    return dict(row) if row else None
 
     # ------------------------------------------------------------------ #
     #  Compatibility shim: thuộc tính .courses cho pages.py               #
