@@ -1,4 +1,4 @@
-from app.errors import Forbidden, NotFound
+from app.errors import Forbidden, NotFound, ValidationError
 from app.schemas import validate_grade_body, validate_score
 
 _store = None
@@ -100,14 +100,15 @@ def update_grade(actor, course_id, student_id, score, *, version=None, store=Non
             req_version = parsed_version
     else:
         validated_score = validate_score(score)
+        if req_version is None:
+            raise ValidationError()
+
+    if req_version is None:
+        raise ValidationError()
 
     enrollment = current.get_enrollment(course_id, student_id)
     if enrollment is None:
         raise NotFound()
-
-    # Nếu client không truyền version, đọc version từ enrollment trước
-    if req_version is None:
-        req_version = enrollment["version"]
 
     old_score = enrollment["score"]
     updated = current.set_score(course_id, student_id, validated_score, req_version)

@@ -107,21 +107,26 @@ def test_a9_a10_a11_update_forbidden(client):
     chi = token(client, "chi.sv@lms.test")
     binh = token(client, "binh.gv@lms.test")
     admin = token(client, "admin@lms.test")
-    assert client.put("/courses/c1/grades/u4", headers=auth(chi), json={"score": 10}).status_code == 403
-    assert client.put("/courses/c1/grades/u4", headers=auth(binh), json={"score": 0}).status_code == 403
-    assert client.put("/courses/c1/grades/u4", headers=auth(admin), json={"score": 10}).status_code == 403
+    assert client.put("/courses/c1/grades/u4", headers=auth(chi), json={"score": 10, "version": 1}).status_code == 403
+    assert client.put("/courses/c1/grades/u4", headers=auth(binh), json={"score": 0, "version": 1}).status_code == 403
+    assert client.put("/courses/c1/grades/u4", headers=auth(admin), json={"score": 10, "version": 1}).status_code == 403
 
 
 def test_a12_validation(client):
     an = token(client, "an.gv@lms.test")
+    v = client.get("/courses/c1/grades/u4", headers=auth(an)).get_json()["version"]
     for score in (11, -1, "10", True):
-        r = client.put("/courses/c1/grades/u4", headers=auth(an), json={"score": score})
+        r = client.put(
+            "/courses/c1/grades/u4",
+            headers=auth(an),
+            json={"score": score, "version": v},
+        )
         assert r.status_code == 400
         assert r.get_json() == {"error": "VALIDATION_ERROR"}
     r = client.put(
         "/courses/c1/grades/u4",
         headers=auth(an),
-        json={"score": 9, "courseId": "c2"},
+        json={"score": 9, "version": v, "courseId": "c2"},
     )
     assert r.status_code == 400
 
@@ -129,10 +134,11 @@ def test_a12_validation(client):
 def test_a13_a14_update_and_visibility(client):
     an = token(client, "an.gv@lms.test")
     chi = token(client, "chi.sv@lms.test")
-    assert client.put("/courses/c1/grades/u6", headers=auth(an), json={"score": 5}).status_code == 404
-    r = client.put("/courses/c1/grades/u4", headers=auth(an), json={"score": 9})
+    v = client.get("/courses/c1/grades/u4", headers=auth(an)).get_json()["version"]
+    assert client.put("/courses/c1/grades/u6", headers=auth(an), json={"score": 5, "version": v}).status_code == 404
+    r = client.put("/courses/c1/grades/u4", headers=auth(an), json={"score": 9, "version": v})
     assert r.status_code == 200
-    assert r.get_json() == {"courseId": "c1", "studentId": "u4", "score": 9}
+    assert r.get_json() == {"courseId": "c1", "studentId": "u4", "score": 9, "version": v + 1}
     assert client.get("/courses/c1/grades", headers=auth(chi)).get_json() == [
         {"studentId": "u4", "score": 9}
     ]
@@ -165,8 +171,9 @@ def test_a18_lockout(client):
 def test_a19_audit_log(app, client):
     binh = token(client, "binh.gv@lms.test")
     an = token(client, "an.gv@lms.test")
-    assert client.put("/courses/c1/grades/u4", headers=auth(binh), json={"score": 0}).status_code == 403
-    assert client.put("/courses/c1/grades/u4", headers=auth(an), json={"score": 9}).status_code == 200
+    v = client.get("/courses/c1/grades/u4", headers=auth(an)).get_json()["version"]
+    assert client.put("/courses/c1/grades/u4", headers=auth(binh), json={"score": 0, "version": v}).status_code == 403
+    assert client.put("/courses/c1/grades/u4", headers=auth(an), json={"score": 9, "version": v}).status_code == 200
 
     lines = Path(app.config["AUDIT_LOG_PATH"]).read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2

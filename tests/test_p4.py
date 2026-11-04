@@ -42,7 +42,7 @@ def test_a9_a11_students_and_admin_cannot_update(client):
         response = client.put(
             "/courses/c1/grades/u4",
             headers=auth(actor_token),
-            json={"score": 10},
+            json={"score": 10, "version": 1},
         )
         assert response.status_code == 403
 
@@ -50,10 +50,11 @@ def test_a9_a11_students_and_admin_cannot_update(client):
 def test_a10_a14_instructor_update_and_visibility(client):
     an = token(client, "an.gv@lms.test")
     chi = token(client, "chi.sv@lms.test")
+    v = client.get("/courses/c1/grades/u4", headers=auth(an)).json["version"]
     assert client.put(
         "/courses/c1/grades/u4",
         headers=auth(an),
-        json={"score": 9},
+        json={"score": 9, "version": v},
     ).status_code == 200
     assert client.get("/courses/c1/grades", headers=auth(chi)).json == [
         {"studentId": "u4", "score": 9}
@@ -62,16 +63,17 @@ def test_a10_a14_instructor_update_and_visibility(client):
 
 def test_a12_validation(client):
     an = token(client, "an.gv@lms.test")
+    v = client.get("/courses/c1/grades/u4", headers=auth(an)).json["version"]
     for score in (11, -1, "10", True):
         assert client.put(
             "/courses/c1/grades/u4",
             headers=auth(an),
-            json={"score": score},
+            json={"score": score, "version": v},
         ).status_code == 400
     assert client.put(
         "/courses/c1/grades/u4",
         headers=auth(an),
-        json={"score": 9, "courseId": "c2"},
+        json={"score": 9, "version": v, "courseId": "c2"},
     ).status_code == 400
 
 
@@ -80,7 +82,7 @@ def test_a13_missing_enrollment(client):
     assert client.put(
         "/courses/c1/grades/u6",
         headers=auth(an),
-        json={"score": 5},
+        json={"score": 5, "version": 1},
     ).status_code == 404
 
 

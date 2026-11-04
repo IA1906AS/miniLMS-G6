@@ -112,6 +112,28 @@ def test_get_course_grades_returns_version_for_instructor(client):
         assert isinstance(row["version"], int)
 
 
+def test_put_grade_missing_version_returns_400(client):
+    """PUT điểm thiếu version trả về 400 VALIDATION_ERROR."""
+    an = token(client, "an.gv@lms.test")
+    # Body chỉ có score, thiếu version
+    r = client.put(
+        "/courses/c1/grades/u4",
+        headers=auth(an),
+        json={"score": 8.5},
+    )
+    assert r.status_code == 400
+    assert r.get_json() == {"error": "VALIDATION_ERROR"}
+
+    # Body rỗng
+    r_empty = client.put(
+        "/courses/c1/grades/u4",
+        headers=auth(an),
+        json={},
+    )
+    assert r_empty.status_code == 400
+    assert r_empty.get_json() == {"error": "VALIDATION_ERROR"}
+
+
 def test_optimistic_locking_validation(client):
     """Kiểm tra validation trường version khi sửa điểm."""
     an = token(client, "an.gv@lms.test")
