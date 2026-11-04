@@ -28,6 +28,15 @@ class NotFound(ApiError):
     code = "NOT_FOUND"
 
 
+class Conflict(ApiError):
+    status = 409
+    code = "CONFLICT"
+
+    def __init__(self, message="Điểm đã bị thay đổi bởi người khác, vui lòng tải lại"):
+        super().__init__(message)
+        self.message = message
+
+
 class AccountLocked(ApiError):
     status = 429
     code = "ACCOUNT_LOCKED"
@@ -36,7 +45,10 @@ class AccountLocked(ApiError):
 def register_error_handlers(app):
     @app.errorhandler(ApiError)
     def _handle_api_error(e):
-        return {"error": e.code}, e.status
+        resp = {"error": e.code}
+        if hasattr(e, "message") and e.message:
+            resp["message"] = e.message
+        return resp, e.status
 
     @app.errorhandler(Forbidden)
     def _handle_forbidden(e):
