@@ -143,8 +143,19 @@ def register_routes(app):
     @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
     def get_course_grades(course_id):
         store = current_app.extensions["store"]
-        rows = services.get_grades(g.actor, course_id, store=store)
+        v_param = request.args.get("version")
+        include_version = v_param.lower() in ("1", "true") if v_param else None
+        rows = services.get_grades(
+            g.actor, course_id, include_version=include_version, store=store
+        )
         return jsonify(rows), 200
+
+    @app.get("/courses/<course_id>/grades/<student_id>")
+    @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
+    def get_course_grade(course_id, student_id):
+        store = current_app.extensions["store"]
+        row = services.get_grade(g.actor, course_id, student_id, store=store)
+        return jsonify(row), 200
 
     @app.get("/courses/<course_id>/grades/export")
     @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
@@ -168,11 +179,12 @@ def register_routes(app):
     @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
     def put_course_grade(course_id, student_id):
         store = current_app.extensions["store"]
-        old_score, new_score = services.update_grade(
+        body = request.get_json(silent=True)
+        old_score, new_score, new_version = services.update_grade(
             g.actor,
             course_id,
             student_id,
-            request.get_json(silent=True),
+            body,
             store=store,
         )
         log_event(
@@ -183,8 +195,11 @@ def register_routes(app):
             oldScore=old_score,
             newScore=new_score,
         )
-        return jsonify(
-            courseId=course_id,
-            studentId=student_id,
-            score=new_score,
-        ), 200
+        resp = {
+            "courseId": course_id,
+            "studentId": student_id,
+            "score": new_score,
+        }
+        if isinstance(body, dict) and "version" in body:
+            resp["version"] = new_version
+        return jsonify(resp), 200
