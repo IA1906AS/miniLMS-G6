@@ -3,12 +3,13 @@ import os
 from flask import Flask
 
 from . import services
+from .db import init_pool
 from .errors import register_error_handlers
 from .gate import register_gate
 from .guards import ExportBulkhead
 from .pages import bp as pages_bp
 from .routes import register_routes
-from .store import Store
+from .store_pg import PgStore
 
 
 def create_app(config=None):
@@ -26,7 +27,12 @@ def create_app(config=None):
         TOKEN_TTL_SECONDS=int(cfg.get("TOKEN_TTL_SECONDS", 900)),
         AUDIT_LOG_PATH=cfg.get("AUDIT_LOG_PATH", "audit.log"),
     )
-    store = Store()
+
+    # ── Khởi tạo PostgreSQL connection pool ──────────────────────────────
+    init_pool(cfg)
+
+    # ── Khởi tạo PgStore (PostgreSQL) thay cho Store (seed.json) ─────────
+    store = PgStore()
     app.extensions["store"] = store
     app.extensions["grade_export_bulkhead"] = ExportBulkhead(limit=2)
     services.configure_store(store)
