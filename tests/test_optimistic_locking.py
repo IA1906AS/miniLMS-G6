@@ -147,3 +147,4 @@ def test_update_nonexistent_enrollment_returns_404(client):
     )
     assert r.status_code == 404
     assert r.get_json() == {"error": "NOT_FOUND"}
+
