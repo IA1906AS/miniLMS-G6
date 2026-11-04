@@ -2,24 +2,19 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const roleNames = { ADMIN: 'Quản trị viên', INSTRUCTOR: 'Giảng viên', STUDENT: 'Sinh viên' };
-  // Keep bearer tokens in memory only. Reloading ends the browser session.
-  let token = null;
+  // Reuse the token from the dedicated login page for this browser tab only.
+  let token = sessionStorage.getItem('accessToken');
   let user = null;
   let expiryTimer;
-  const accountPage = location.pathname === '/account';
-  $('home-page').hidden = accountPage;
-  $('account-page').hidden = !accountPage;
-  $('breadcrumb').textContent = accountPage ? 'Tài khoản' : 'Trang chủ';
-  document.title = (accountPage ? 'Tài khoản' : 'Trang chủ') + ' · miniLMS';
-  document.querySelector(`[data-page="${accountPage ? 'account' : 'home'}"]`).classList.add('active');
-  document.querySelector(`[data-page="${accountPage ? 'account' : 'home'}"]`).setAttribute('aria-current', 'page');
+  let reportVersion = 0;
+  showPage();
 
-  // Navigate between the two views without reloading or persisting the token.
+  // Navigate between views without reloading or persisting the token.
   document.addEventListener('click', event => {
     const link = event.target.closest('a');
     if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
     const url = new URL(link.href);
-    if (url.origin !== location.origin || !['/', '/home', '/account'].includes(url.pathname)) return;
+    if (url.origin !== location.origin || !['/', '/home', '/account', '/reports'].includes(url.pathname)) return;
     event.preventDefault();
     history.pushState({}, '', url.pathname + url.hash);
     showPage();
@@ -27,20 +22,97 @@
     else window.scrollTo(0, 0);
   });
   function showPage() {
-    const isAccount = location.pathname === '/account';
-    $('home-page').hidden = isAccount;
-    $('account-page').hidden = !isAccount;
-    $('breadcrumb').textContent = isAccount ? 'Tài khoản' : 'Trang chủ';
-    document.title = (isAccount ? 'Tài khoản' : 'Trang chủ') + ' · miniLMS';
+    const page = location.pathname === '/account' ? 'account' : location.pathname === '/reports' ? 'reports' : 'home';
+    const names = { home: 'Trang chủ', account: 'Tài khoản', reports: 'Báo cáo điểm' };
+    $('home-page').hidden = page !== 'home';
+    $('account-page').hidden = page !== 'account';
+    $('reports-page').hidden = page !== 'reports';
+    $('breadcrumb').textContent = names[page];
+    document.title = names[page] + ' · miniLMS';
     document.querySelectorAll('[data-page]').forEach(link => {
-      const active = link.dataset.page === (isAccount ? 'account' : 'home');
+      const active = link.dataset.page === page;
       link.classList.toggle('active', active);
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
   }
   window.addEventListener('popstate', showPage);
-  function empty(title, description, signIn = false) {
+  function reportPlaceholder(message) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 2; cell.className = 'report-empty'; cell.textContent = message;
+    row.append(cell); $('report-preview').tBodies[0].replaceChildren(row);
+    $('report-count').textContent = '—';
+  }
+  async function loadReport() {
+    const courseId = $('report-course').value;
+    const version = ++reportVersion;
+    $('report-download').disabled = true;
+    if (!courseId || !token) {
+      reportPlaceholder('Chọn một khóa học để xem dữ liệu.');
+      $('report-message').textContent = '';
+      return;
+    }
+    $('report-scope').textContent = $('report-course').selectedOptions[0].textContent;
+    $('report-message').textContent = 'Đang tải bảng điểm…';
+    reportPlaceholder('Đang tải dữ liệu…');
+    try {
+      const rows = await api(`/courses/${encodeURIComponent(courseId)}/grades`);
+      if (version !== reportVersion) return;
+      const body = $('report-preview').tBodies[0];
+      body.replaceChildren();
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        const student = document.createElement('td'); student.textContent = row.studentId;
+        const score = document.createElement('td'); score.textContent = row.score === null ? 'Chưa có điểm' : `${row.score.toLocaleString('vi-VN')} / 10`;
+        tr.append(student, score); body.append(tr);
+      });
+      if (!rows.length) reportPlaceholder('Khóa học này chưa có điểm.');
+      $('report-count').textContent = `${rows.length} bản ghi`;
+      $('report-message').textContent = '';
+      $('report-download').disabled = false;
+    } catch (error) {
+      if (version !== reportVersion) return;
+      reportPlaceholder('Không tải được điểm. Hãy chọn lại khóa học để thử lại.');
+      $('report-message').textContent = user ? 'Không tải được bảng điểm. Vui lòng thử lại.' : 'Phiên đăng nhập đã hết hạn.';
+    }
+  }
+  $('report-course').addEventListener('change', loadReport);
+  $('report-download').addEventListener('click', async () => {
+    const courseId = $('report-course').value;
+    if (!token || !courseId) return;
+    const activeToken = token;
+    $('report-download').disabled = true;
+    $('report-course').disabled = true;
+    $('report-message').textContent = 'Đang tạo tệp CSV…';
+    try {
+      const response = await fetch(`/courses/${encodeURIComponent(courseId)}/grades/export`, {
+        headers: { Authorization: `Bearer ${activeToken}` }
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        if (response.status === 401) reset();
+        throw new Error(error.error || 'SERVER_ERROR');
+      }
+      const blob = await response.blob();
+      if (token !== activeToken) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = `grades-${courseId}.csv`;
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      $('report-message').textContent = 'Đã tạo tệp CSV. Trình duyệt sẽ lưu tệp về máy.';
+    } catch (error) {
+      if (!token) return;
+      $('report-message').textContent = error.message === 'EXPORT_BUSY'
+        ? 'Hệ thống đang xuất tối đa 2 báo cáo. Vui lòng thử lại sau.'
+        : 'Không thể xuất báo cáo. Vui lòng thử lại.';
+    } finally {
+      $('report-course').disabled = !token;
+      $('report-download').disabled = !token || !courseId;
+    }
+  });
+  function empty(title, description) {
     const box = document.createElement('div');
     box.className = 'empty-state';
     const icon = document.createElement('span');
@@ -49,42 +121,37 @@
     const heading = document.createElement('h3'); heading.textContent = title;
     const text = document.createElement('p'); text.textContent = description;
     content.append(heading, text);
-    if (signIn) {
-      const link = document.createElement('a'); link.href = '/account'; link.textContent = 'Đăng nhập để tiếp tục ↗'; content.append(link);
-    }
     box.append(icon, content); $('course-grid').replaceChildren(box);
   }
-  function reset(message = '') {
-    clearTimeout(expiryTimer); token = null; user = null;
-    $('login-panel').hidden = false; $('profile-panel').hidden = true;
-    $('header-name').textContent = 'Tài khoản của bạn';
-    $('header-avatar').textContent = $('profile-avatar').textContent = 'M';
-    $('profile-role').textContent = 'Chào mừng bạn';
-    $('profile-title').textContent = 'Cùng bắt đầu nhé.';
-    $('profile-description').textContent = 'Đăng nhập để mở không gian học tập của riêng bạn.';
-    $('role-stat').textContent = 'Khách'; $('course-count').textContent = $('average').textContent = '—';
-    $('session-caption').textContent = 'ĐĂNG NHẬP ĐỂ BẮT ĐẦU';
-    $('course-pill').textContent = 'Không gian học tập';
-    $('profile-email').textContent = $('profile-id').textContent = $('profile-role-detail').textContent = '';
-    $('account-message').textContent = message; $('home-message').textContent = '';
-    empty('Hành trình của bạn bắt đầu tại đây', 'Đăng nhập để xem khóa học và kết quả học tập của bạn.', true);
+  function reset() {
+    clearTimeout(expiryTimer); token = null; user = null; ++reportVersion;
+    sessionStorage.removeItem('accessToken');
+    sessionStorage.removeItem('accessTokenExpiresAt');
+    location.replace('/login');
   }
   async function api(path, options = {}) {
     const response = await fetch(path, { ...options, headers: { ...options.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
     const data = await response.json();
     if (!response.ok) {
-      if (response.status === 401 && path !== '/auth/login') reset('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      if (response.status === 401) reset();
       throw new Error(data.error || 'SERVER_ERROR');
     }
     return data;
   }
   async function loadCourses() {
     $('home-message').textContent = 'Đang tải khóa học…';
+    const activeToken = token;
     try {
       const { courses } = await api('/dashboard');
+      if (!activeToken || token !== activeToken) return;
+      $('report-course').replaceChildren(new Option(courses.length ? 'Chọn khóa học' : 'Chưa có khóa học', ''));
+      courses.forEach(course => $('report-course').add(new Option(course.title, course.id)));
+      $('report-course').disabled = !courses.length;
+
+      $('report-scope').textContent = courses.length ? 'Chọn khóa học để xem trước bảng điểm.' : 'Chưa có khóa học để xuất.';
+      $('report-message').textContent = courses.length ? '' : 'Chưa có khóa học để xuất báo cáo.';
       $('home-message').textContent = '';
       $('course-count').textContent = courses.length;
-      $('course-pill').textContent = `${courses.length} khóa học`;
       const scores = courses.map(c => c.score).filter(s => s !== null);
       $('average').textContent = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—';
       if (!courses.length) { empty('Chưa có khóa học', 'Các khóa học được phân công hoặc ghi danh sẽ xuất hiện tại đây.'); return; }
@@ -103,36 +170,31 @@
         result.append(label, score); body.append(title, instructor, result); card.append(cover, body); $('course-grid').append(card);
       });
     } catch (error) {
-      if (user) { $('home-message').textContent = 'Không tải được khóa học. Vui lòng thử lại.'; empty('Kết nối bị gián đoạn', 'Bạn có thể thử tải lại danh sách.'); const retry = document.createElement('button'); retry.className = 'button outline'; retry.textContent = 'Thử lại'; retry.onclick = loadCourses; $('course-grid').append(retry); }
+      if (user) { $('home-message').textContent = 'Không tải được khóa học. Vui lòng thử lại.'; $('report-message').textContent = 'Không tải được danh sách khóa học. Vui lòng thử lại ở trang chủ.'; empty('Kết nối bị gián đoạn', 'Bạn có thể thử tải lại danh sách.'); const retry = document.createElement('button'); retry.className = 'button outline'; retry.textContent = 'Thử lại'; retry.onclick = loadCourses; $('course-grid').append(retry); }
     }
   }
-  $('toggle-password').addEventListener('click', () => {
-    const show = $('password').type === 'password'; $('password').type = show ? 'text' : 'password';
-    $('toggle-password').textContent = show ? 'Ẩn' : 'Hiện'; $('toggle-password').setAttribute('aria-label', show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
-  });
-  $('login-form').addEventListener('submit', async event => {
-    event.preventDefault(); $('login-button').disabled = true; $('account-message').textContent = 'Đang đăng nhập…';
+  $('logout').addEventListener('click', reset);
+  async function restoreSession() {
+    const expiresAt = Number(sessionStorage.getItem('accessTokenExpiresAt'));
+    if (!token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      reset();
+      return;
+    }
     try {
-      const result = await api('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value }) });
-      token = result.accessToken;
       user = await api('/me');
-      $('password').value = ''; $('password').type = 'password'; $('toggle-password').textContent = 'Hiện'; $('toggle-password').setAttribute('aria-label', 'Hiện mật khẩu');
-      $('login-panel').hidden = true; $('profile-panel').hidden = false;
       $('header-name').textContent = user.email;
       $('header-avatar').textContent = $('profile-avatar').textContent = user.email[0].toUpperCase();
       $('profile-title').textContent = user.email.split('@')[0];
-      $('profile-description').textContent = 'Không gian học tập của bạn đã sẵn sàng.';
-      $('profile-email').textContent = user.email; $('profile-id').textContent = user.id;
+      $('profile-email').textContent = user.email;
+      $('profile-id').textContent = user.id;
       $('profile-role-detail').textContent = $('profile-role').textContent = $('role-stat').textContent = roleNames[user.role] || user.role;
-      $('session-caption').textContent = 'ĐÃ KẾT NỐI KHÔNG GIAN HỌC TẬP';
-      $('account-message').textContent = '';
-      expiryTimer = setTimeout(() => reset('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'), result.expiresIn * 1000);
+
+      expiryTimer = setTimeout(reset, Math.min(expiresAt - Date.now(), 2147483647));
+      document.documentElement.style.visibility = 'visible';
       await loadCourses();
     } catch (error) {
       reset();
-      $('account-message').textContent = ({ INVALID_CREDENTIALS: 'Email hoặc mật khẩu không chính xác.', ACCOUNT_LOCKED: 'Tài khoản tạm khóa. Vui lòng thử lại sau 15 phút.' })[error.message] || 'Không thể đăng nhập. Vui lòng thử lại.';
-    } finally { $('login-button').disabled = false; }
-  });
-  $('logout').addEventListener('click', () => { reset('Bạn đã đăng xuất.'); $('email').value = ''; $('password').value = ''; });
-  reset();
+    }
+  }
+  restoreSession();
 })();

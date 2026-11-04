@@ -1,7 +1,10 @@
+import csv
+import io
 import re
 
 import bcrypt
-from flask import current_app, g, jsonify, render_template, request
+from flask import Response, current_app, g, jsonify, request
+from werkzeug.utils import secure_filename
 
 from audit import log_event
 from app import services
@@ -14,19 +17,20 @@ from app.auth import (
     me,
 )
 from app.errors import AccountLocked, InvalidCredentials
-from app.guards import require_role
+from app.guards import ExportBusy, require_role
+
+
+def render_grade_csv(rows):
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(("studentId", "score"))
+    for row in rows:
+        writer.writerow((row["studentId"], row["score"]))
+    return output.getvalue()
 
 
 def register_routes(app):
     """Register P4 routes; P1 app factory calls this once after Store setup."""
-
-    @app.get("/login")
-    def login_page():
-        return render_template("login.html")
-
-    @app.get("/register")
-    def register_page():
-        return render_template("register.html")
 
     @app.post("/auth/login")
     def login():
@@ -81,6 +85,24 @@ def register_routes(app):
         store = current_app.extensions["store"]
         rows = services.get_grades(g.actor, course_id, store=store)
         return jsonify(rows), 200
+
+    @app.get("/courses/<course_id>/grades/export")
+    @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
+    def export_course_grades(course_id):
+        try:
+            with current_app.extensions["grade_export_bulkhead"].slot():
+                rows = services.get_grades(
+                    g.actor, course_id, store=current_app.extensions["store"]
+                )
+                content = render_grade_csv(rows)
+                filename = f"grades-{secure_filename(course_id) or 'course'}.csv"
+                return Response(
+                    content,
+                    mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                )
+        except ExportBusy:
+            return {"error": "EXPORT_BUSY"}, 503
 
     @app.put("/courses/<course_id>/grades/<student_id>")
     @require_role("ADMIN", "INSTRUCTOR", "STUDENT")

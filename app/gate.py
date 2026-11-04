@@ -10,6 +10,7 @@ PUBLIC_PAGES = {
     "/",
     "/home",
     "/account",
+    "/reports",
     "/login",
     "/register",
     "/static/app.css",

@@ -5,6 +5,7 @@ from flask import Flask
 from . import services
 from .errors import register_error_handlers
 from .gate import register_gate
+from .guards import ExportBulkhead
 from .pages import bp as pages_bp
 from .routes import register_routes
 from .store import Store
@@ -27,6 +28,7 @@ def create_app(config=None):
     )
     store = Store()
     app.extensions["store"] = store
+    app.extensions["grade_export_bulkhead"] = ExportBulkhead(limit=2)
     services.configure_store(store)
 
     register_gate(app)

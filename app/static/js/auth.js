@@ -18,8 +18,8 @@ form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(result.error || 'REQUEST_FAILED');
     if (form.dataset.mode === 'login') {
       sessionStorage.setItem('accessToken', result.accessToken);
-      message.textContent = 'Đăng nhập thành công. Bạn có thể tiếp tục học tập.';
-      message.className = 'message success';
+      sessionStorage.setItem('accessTokenExpiresAt', String(Date.now() + result.expiresIn * 1000));
+      window.location.assign('/home');
     } else {
       window.location.href = '/login?registered=1';
     }
