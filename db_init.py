@@ -44,8 +44,11 @@ CREATE TABLE IF NOT EXISTS enrollments (
     course_id  VARCHAR(50) NOT NULL REFERENCES courses(id),
     student_id VARCHAR(50) NOT NULL REFERENCES users(id),
     score      NUMERIC(4,1),
+    version    INT NOT NULL DEFAULT 1,
     PRIMARY KEY (course_id, student_id)
 );
+
+ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS password_resets (
     email      VARCHAR(255) PRIMARY KEY,
