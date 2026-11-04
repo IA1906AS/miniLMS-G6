@@ -263,53 +263,39 @@ class PgStore:
         cid: str,
         sid: str,
         score: float,
-        version: int | None = None,
+        version: int,
     ) -> dict | None:
         """
-        Cập nhật điểm của sinh viên trong khoá học.
+        Cập nhật điểm của sinh viên trong khoá học với Optimistic Locking.
 
-        Khi truyền version (Optimistic Locking):
+        Bắt buộc truyền version (int):
             UPDATE enrollments SET score = %s, version = version + 1
             WHERE course_id = %s AND student_id = %s AND version = %s
         Nếu rowcount = 0 thì ném Conflict (HTTP 409).
         """
         with get_conn() as conn:
             with get_cursor(conn) as cur:
-                if version is not None:
+                cur.execute(
+                    """
+                    UPDATE enrollments
+                    SET score = %s, version = version + 1
+                    WHERE course_id = %s AND student_id = %s AND version = %s
+                    RETURNING course_id AS "courseId", student_id AS "studentId",
+                              score::float8 AS score, version
+                    """,
+                    (score, cid, sid, version),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    # Phân biệt giữa 404 (không tìm thấy enrollment) và 409 (xung đột version)
                     cur.execute(
-                        """
-                        UPDATE enrollments
-                        SET score = %s, version = version + 1
-                        WHERE course_id = %s AND student_id = %s AND version = %s
-                        RETURNING course_id AS "courseId", student_id AS "studentId",
-                                  score::float8 AS score, version
-                        """,
-                        (score, cid, sid, version),
+                        "SELECT 1 FROM enrollments WHERE course_id = %s AND student_id = %s",
+                        (cid, sid),
                     )
-                    row = cur.fetchone()
-                    if row is None:
-                        # Phân biệt giữa 404 (không tìm thấy enrollment) và 409 (xung đột version)
-                        cur.execute(
-                            "SELECT 1 FROM enrollments WHERE course_id = %s AND student_id = %s",
-                            (cid, sid),
-                        )
-                        if cur.fetchone() is None:
-                            return None
-                        raise Conflict("Điểm đã bị thay đổi bởi người khác, vui lòng tải lại")
-                    return dict(row)
-                else:
-                    cur.execute(
-                        """
-                        UPDATE enrollments
-                        SET score = %s, version = version + 1
-                        WHERE course_id = %s AND student_id = %s
-                        RETURNING course_id AS "courseId", student_id AS "studentId",
-                                  score::float8 AS score, version
-                        """,
-                        (score, cid, sid),
-                    )
-                    row = cur.fetchone()
-                    return dict(row) if row else None
+                    if cur.fetchone() is None:
+                        return None
+                    raise Conflict("Điểm đã bị thay đổi bởi người khác, vui lòng tải lại")
+                return dict(row)
 
     # ------------------------------------------------------------------ #
     #  Compatibility shim: thuộc tính .courses cho pages.py               #

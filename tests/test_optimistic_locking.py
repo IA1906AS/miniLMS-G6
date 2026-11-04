@@ -148,3 +148,30 @@ def test_update_nonexistent_enrollment_returns_404(client):
     assert r.status_code == 404
     assert r.get_json() == {"error": "NOT_FOUND"}
 
+
+def test_store_set_score_requires_version(app):
+    """set_score bắt buộc phải truyền version (int), không có giá trị mặc định."""
+    import inspect
+    from app.errors import Conflict
+
+    store = app.extensions["store"]
+    sig = inspect.signature(store.set_score)
+    version_param = sig.parameters["version"]
+    assert version_param.default is inspect.Parameter.empty, "version must be a required parameter"
+
+    # Gọi không truyền version gây TypeError
+    with pytest.raises(TypeError):
+        store.set_score("c1", "u4", 9.0)
+
+    # Đọc version qua get_enrollment trước
+    enrollment = store.get_enrollment("c1", "u4")
+    curr_version = enrollment["version"]
+
+    # Cập nhật thành công với version đúng
+    updated = store.set_score("c1", "u4", 8.8, curr_version)
+    assert updated["score"] == 8.8
+    assert updated["version"] == curr_version + 1
+
+    # Thử cập nhật với version cũ -> Conflict
+    with pytest.raises(Conflict):
+        store.set_score("c1", "u4", 9.0, curr_version)

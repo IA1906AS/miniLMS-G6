@@ -105,10 +105,14 @@ def update_grade(actor, course_id, student_id, score, *, version=None, store=Non
     if enrollment is None:
         raise NotFound()
 
+    # Nếu client không truyền version, đọc version từ enrollment trước
+    if req_version is None:
+        req_version = enrollment["version"]
+
     old_score = enrollment["score"]
-    updated = current.set_score(course_id, student_id, validated_score, version=req_version)
+    updated = current.set_score(course_id, student_id, validated_score, req_version)
     if updated is None:
         raise NotFound()
 
-    new_version = updated.get("version", 1)
+    new_version = updated["version"]
     return old_score, validated_score, new_version
