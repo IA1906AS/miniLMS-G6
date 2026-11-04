@@ -7,7 +7,7 @@ on:
   pull_request:
     branches: [ "main", "master" ]
   # Cho phép kích hoạt quét thủ công từ giao diện GitHub
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   semgrep-scan:
@@ -37,5 +37,5 @@ jobs:
         uses: github/codeql-action/upload-sarif@f1f6e5f6af878fb37288ce1c627459e94dbf7d01
         with:
           sarif_file: semgrep-results.sarif
-        if: always() 
+        if: always()
         #Luôn chạy bước này ngay cả khi phát hiện lỗi bảo mật ở bước trước

@@ -17,7 +17,7 @@
     <p id="form-message" class="message" role="alert" aria-live="polite"></p>
     <button type="submit">Tạo tài khoản <span aria-hidden="true">→</span></button>
   </form>
-  <p class="switch">Đã có tài khoản? <a href="{{ url_for('login_page') }}">Đăng nhập</a></p>
+  <p class="switch">Đã có tài khoản? <a href="{{ url_for('pages.login_page') }}">Đăng nhập</a></p>
 </div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/auth.js') }}" defer></script>{% endblock %}

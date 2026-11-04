@@ -7,9 +7,20 @@ from app.errors import Forbidden
 bp = Blueprint("pages", __name__)
 
 
+@bp.get("/login")
+def login_page():
+    return render_template("login.html")
+
+
+@bp.get("/register")
+def register_page():
+    return render_template("register.html")
+
+
 @bp.get("/")
 @bp.get("/home")
 @bp.get("/account")
+@bp.get("/reports")
 def index():
     return render_template("index.html")
 
