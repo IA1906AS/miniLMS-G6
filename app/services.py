@@ -271,3 +271,140 @@ def list_members(actor, course_id=None, *, store=None):
     ) is None:
         raise Forbidden()
     return current.list_course_members(course_id)
+
+
+# ------------------------------------------------------------------ #
+#  Courses                                                             #
+# ------------------------------------------------------------------ #
+
+
+def _course_visible(store, actor, course_id):
+    """ADMIN, instructor-of, or enrolled student may read course content."""
+    if actor["role"] == "ADMIN":
+        return
+    if actor["role"] == "INSTRUCTOR":
+        if store.is_instructor_of(actor["id"], course_id):
+            return
+    elif store.get_enrollment(course_id, actor["id"]) is not None:
+        return
+    raise Forbidden()
+
+
+def list_courses(actor, q=None, instructor_id=None, *, store=None):
+    current = _get_store(store)
+    enrolled_of = actor["id"] if actor["role"] == "STUDENT" else None
+    if actor["role"] == "INSTRUCTOR":
+        instructor_id = actor["id"]
+    return current.search_courses(q=q, instructor_id=instructor_id, enrolled_of=enrolled_of)
+
+
+def _validate_course_fields(payload):
+    if not isinstance(payload, dict):
+        raise ValidationError()
+    title = payload.get("title", "")
+    code = payload.get("code", "")
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 200:
+        raise ValidationError()
+    if not isinstance(code, str) or not 1 <= len(code.strip()) <= 20:
+        raise ValidationError()
+    return title.strip(), code.strip()
+
+
+def create_course(actor, payload, *, store=None):
+    current = _get_store(store)
+    if actor["role"] not in ("ADMIN", "INSTRUCTOR"):
+        raise Forbidden()
+    title, code = _validate_course_fields(payload)
+    return current.create_course(title, actor["id"], code)
+
+
+def update_course(actor, course_id, payload, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    if actor["role"] != "ADMIN" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    title, code = _validate_course_fields(payload)
+    updated = current.update_course(course_id, title, code)
+    if updated is None:
+        raise NotFound()
+    return updated
+
+
+def enroll_by_code(actor, code, *, store=None):
+    current = _get_store(store)
+    if actor["role"] != "STUDENT":
+        raise Forbidden()
+    if not isinstance(code, str) or not code.strip():
+        raise ValidationError()
+    course = current.get_course_by_code(code.strip())
+    if course is None:
+        raise NotFound()
+    if current.get_enrollment(course["id"], actor["id"]) is not None:
+        raise Conflict("Bạn đã ghi danh khoá học này")
+    return current.add_enrollment(course["id"], actor["id"])
+
+
+def add_student(actor, course_id, student_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    if actor["role"] != "ADMIN" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    if current.get_user_by_id(student_id) is None:
+        raise NotFound()
+    if current.get_enrollment(course_id, student_id) is not None:
+        raise Conflict("Sinh viên đã ghi danh khoá học này")
+    return current.add_enrollment(course_id, student_id)
+
+
+# ------------------------------------------------------------------ #
+#  Materials                                                           #
+# ------------------------------------------------------------------ #
+
+
+def list_materials(actor, course_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _course_visible(current, actor, course_id)
+    return current.list_materials(course_id)
+
+
+def create_material(actor, course_id, stored_name, original_name, size, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    if actor["role"] != "ADMIN" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    return current.create_material(
+        course_id, actor["id"], original_name, stored_name, size
+    )
+
+
+def get_material_file(actor, material_id, *, store=None):
+    current = _get_store(store)
+    material = current.get_material_file(material_id)
+    if material is None:
+        raise NotFound()
+    _course(current, material["course_id"])
+    _course_visible(current, actor, material["course_id"])
+    return material
+
+
+def delete_material(actor, material_id, *, store=None):
+    current = _get_store(store)
+    material = current.get_material_file(material_id)
+    if material is None:
+        raise NotFound()
+    _course(current, material["course_id"])
+    allowed = (
+        actor["role"] == "ADMIN"
+        or material["uploader_id"] == actor["id"]
+        or current.is_instructor_of(actor["id"], material["course_id"])
+    )
+    if not allowed:
+        raise Forbidden()
+    return current.delete_material(material_id)

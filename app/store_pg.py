@@ -16,7 +16,7 @@ import bcrypt
 from psycopg2 import errors as pg_errors
 
 from .db import get_conn, get_cursor
-from .errors import Conflict, DeadlinePassed, InvalidAttemptState
+from .errors import CodeExists, Conflict, DeadlinePassed, InvalidAttemptState
 
 
 class PgStore:
@@ -295,7 +295,10 @@ class PgStore:
         with get_conn() as conn:
             with get_cursor(conn) as cur:
                 cur.execute(
-                    "SELECT id, title, instructor_id AS \"instructorId\" FROM courses WHERE id = %s LIMIT 1",
+                    """
+                    SELECT id, title, instructor_id AS "instructorId", code
+                    FROM courses WHERE id = %s LIMIT 1
+                    """,
                     (cid,),
                 )
                 row = cur.fetchone()
@@ -306,7 +309,10 @@ class PgStore:
         with get_conn() as conn:
             with get_cursor(conn) as cur:
                 cur.execute(
-                    'SELECT id, title, instructor_id AS "instructorId" FROM courses ORDER BY id'
+                    """
+                    SELECT id, title, instructor_id AS "instructorId", code
+                    FROM courses ORDER BY id
+                    """
                 )
                 rows = cur.fetchall()
         return [dict(r) for r in rows]
@@ -320,6 +326,213 @@ class PgStore:
                     (cid, uid),
                 )
                 return cur.fetchone() is not None
+
+    def search_courses(
+        self,
+        q: str | None = None,
+        instructor_id: str | None = None,
+        enrolled_of: str | None = None,
+    ) -> list[dict]:
+        sql = (
+            'SELECT c.id, c.title, c.instructor_id AS "instructorId", c.code '
+            "FROM courses c"
+        )
+        where: list[str] = []
+        params: list = []
+        if q:
+            where.append("c.title ILIKE %s")
+            params.append(f"%{q}%")
+        if instructor_id:
+            where.append("c.instructor_id = %s")
+            params.append(instructor_id)
+        if enrolled_of:
+            where.append(
+                "c.id IN (SELECT course_id FROM enrollments WHERE student_id = %s)"
+            )
+            params.append(enrolled_of)
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY c.id"
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+        return [dict(r) for r in rows]
+
+    def create_course(
+        self, title: str, instructor_id: str, code: str
+    ) -> dict:
+        try:
+            with get_conn() as conn:
+                with get_cursor(conn) as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO courses (id, title, instructor_id, code)
+                        VALUES (%s, %s, %s, %s)
+                        RETURNING id, title,
+                                  instructor_id AS "instructorId", code
+                        """,
+                        (uuid4().hex, title, instructor_id, code),
+                    )
+                    row = cur.fetchone()
+        except pg_errors.UniqueViolation as exc:
+            raise CodeExists() from exc
+        return dict(row)
+
+    def update_course(self, cid: str, title: str, code: str) -> dict | None:
+        try:
+            with get_conn() as conn:
+                with get_cursor(conn) as cur:
+                    cur.execute(
+                        """
+                        UPDATE courses SET title = %s, code = %s
+                        WHERE id = %s
+                        RETURNING id, title,
+                                  instructor_id AS "instructorId", code
+                        """,
+                        (title, code, cid),
+                    )
+                    row = cur.fetchone()
+        except pg_errors.UniqueViolation as exc:
+            raise CodeExists() from exc
+        return dict(row) if row else None
+
+    def get_course_by_code(self, code: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, title, instructor_id AS "instructorId", code
+                    FROM courses WHERE code = %s LIMIT 1
+                    """,
+                    (code,),
+                )
+                row = cur.fetchone()
+        return dict(row) if row else None
+
+    def add_enrollment(self, cid: str, sid: str) -> dict:
+        try:
+            with get_conn() as conn:
+                with get_cursor(conn) as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO enrollments (course_id, student_id)
+                        VALUES (%s, %s)
+                        RETURNING course_id AS "courseId",
+                                  student_id AS "studentId", score::float8 AS score
+                        """,
+                        (cid, sid),
+                    )
+                    row = cur.fetchone()
+        except pg_errors.UniqueViolation as exc:
+            raise Conflict("Sinh viên đã ghi danh khoá học này") from exc
+        return dict(row)
+
+    def delete_course(self, cid: str) -> bool:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                # enrollments and quiz_attempts predate ON DELETE CASCADE
+                cur.execute("DELETE FROM quiz_attempts WHERE course_id = %s", (cid,))
+                cur.execute("DELETE FROM enrollments WHERE course_id = %s", (cid,))
+                cur.execute("DELETE FROM courses WHERE id = %s", (cid,))
+                return cur.rowcount > 0
+
+    # ------------------------------------------------------------------ #
+    #  Materials                                                           #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _material_public(row: dict) -> dict:
+        out = {
+            "id": row["id"],
+            "courseId": row["course_id"],
+            "uploaderId": row["uploader_id"],
+            "originalName": row["original_name"],
+            "sizeBytes": int(row["size_bytes"]),
+            "createdAt": row["created_at"].isoformat(),
+            "downloadUrl": f"/materials/{row['id']}/download",
+        }
+        return out
+
+    def create_material(
+        self,
+        cid: str,
+        uploader_id: str,
+        original_name: str,
+        stored_name: str,
+        size_bytes: int,
+    ) -> dict:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO materials
+                        (id, course_id, uploader_id, original_name,
+                         stored_name, size_bytes)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, course_id, uploader_id, original_name,
+                              stored_name, size_bytes, created_at
+                    """,
+                    (uuid4().hex, cid, uploader_id, original_name,
+                     stored_name, size_bytes),
+                )
+                row = cur.fetchone()
+        return self._material_public(dict(row))
+
+    def list_materials(self, cid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, uploader_id, original_name,
+                           stored_name, size_bytes, created_at
+                    FROM materials WHERE course_id = %s
+                    ORDER BY created_at DESC, id
+                    """,
+                    (cid,),
+                )
+                rows = cur.fetchall()
+        return [self._material_public(dict(r)) for r in rows]
+
+    def get_material(self, mid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, uploader_id, original_name,
+                           stored_name, size_bytes, created_at
+                    FROM materials WHERE id = %s LIMIT 1
+                    """,
+                    (mid,),
+                )
+                row = cur.fetchone()
+        return self._material_public(dict(row)) if row else None
+
+    def delete_material(self, mid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    DELETE FROM materials WHERE id = %s
+                    RETURNING course_id, uploader_id, stored_name
+                    """,
+                    (mid,),
+                )
+                row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_material_file(self, mid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT course_id, uploader_id, original_name, stored_name
+                    FROM materials WHERE id = %s LIMIT 1
+                    """,
+                    (mid,),
+                )
+                row = cur.fetchone()
+        return dict(row) if row else None
 
     # ------------------------------------------------------------------ #
     #  Enrollment / grade queries                                          #

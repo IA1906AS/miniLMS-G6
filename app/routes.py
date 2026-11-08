@@ -12,6 +12,7 @@ from flask import (
     g,
     jsonify,
     request,
+    send_file,
     send_from_directory,
 )
 from werkzeug.utils import secure_filename
@@ -361,3 +362,106 @@ def register_routes(app):
             score=attempt["score"],
         )
         return jsonify(attempt), 200
+
+    # ── Courses ─────────────────────────────────────────────────────────
+
+    @app.get("/api/courses")
+    def api_courses():
+        store = current_app.extensions["store"]
+        rows = services.list_courses(
+            g.actor,
+            q=request.args.get("q"),
+            instructor_id=request.args.get("instructorId"),
+            store=store,
+        )
+        return jsonify(rows), 200
+
+    @app.post("/courses")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def create_course():
+        store = current_app.extensions["store"]
+        course = services.create_course(
+            g.actor, request.get_json(silent=True), store=store
+        )
+        return jsonify(course), 201
+
+    @app.patch("/courses/<course_id>")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def update_course(course_id):
+        store = current_app.extensions["store"]
+        course = services.update_course(
+            g.actor, course_id, request.get_json(silent=True), store=store
+        )
+        return jsonify(course), 200
+
+    @app.post("/courses/enroll")
+    @require_role("STUDENT")
+    def enroll_by_code():
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        code = body.get("code") if isinstance(body, dict) else None
+        enrollment = services.enroll_by_code(g.actor, code, store=store)
+        log_event(g.actor["id"], "ENROLL", enrollment["courseId"], "SUCCESS")
+        return jsonify(enrollment), 201
+
+    @app.post("/courses/<course_id>/students")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def add_course_student(course_id):
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        student_id = body.get("studentId") if isinstance(body, dict) else None
+        if not isinstance(student_id, str) or not student_id.strip():
+            raise ValidationError()
+        enrollment = services.add_student(
+            g.actor, course_id, student_id.strip(), store=store
+        )
+        log_event(g.actor["id"], "ENROLL", f"{course_id}/{student_id}", "SUCCESS")
+        return jsonify(enrollment), 201
+
+    # ── Materials ───────────────────────────────────────────────────────
+
+    @app.post("/courses/<course_id>/materials")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def upload_material(course_id):
+        storage = request.files.get("file")
+        if storage is None:
+            raise ValidationError()
+        stored, original, size = files.save_upload(
+            current_app.config["UPLOAD_DIR"], storage, "materials"
+        )
+        store = current_app.extensions["store"]
+        try:
+            material = services.create_material(
+                g.actor, course_id, stored, original, size, store=store
+            )
+        except Exception:
+            files.delete_upload(
+                current_app.config["UPLOAD_DIR"], "materials", stored
+            )
+            raise
+        return jsonify(material), 201
+
+    @app.get("/courses/<course_id>/materials")
+    def list_course_materials(course_id):
+        store = current_app.extensions["store"]
+        rows = services.list_materials(g.actor, course_id, store=store)
+        return jsonify(rows), 200
+
+    @app.get("/materials/<material_id>/download")
+    def download_material(material_id):
+        store = current_app.extensions["store"]
+        material = services.get_material_file(g.actor, material_id, store=store)
+        path = files.upload_path(
+            current_app.config["UPLOAD_DIR"], "materials", material["stored_name"]
+        )
+        return send_file(path, as_attachment=True, download_name=material["original_name"])
+
+    @app.delete("/materials/<material_id>")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def delete_material(material_id):
+        store = current_app.extensions["store"]
+        removed = services.delete_material(g.actor, material_id, store=store)
+        files.delete_upload(
+            current_app.config["UPLOAD_DIR"], "materials", removed["stored_name"]
+        )
+        return {"message": "Deleted"}, 200
