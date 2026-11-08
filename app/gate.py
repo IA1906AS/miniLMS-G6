@@ -26,6 +26,7 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("POST", "/auth/register"),
     ("POST", "/auth/forgot-password"),
     ("POST", "/auth/reset-password"),
+    ("GET", "/api/openapi.yaml"),
 }
 
 

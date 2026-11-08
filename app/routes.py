@@ -705,3 +705,10 @@ def register_routes(app):
             limit = 200
         rows = services.admin_read_audit(g.actor, limit)
         return jsonify(rows), 200
+
+    @app.get("/api/openapi.yaml")
+    def openapi_spec():
+        return send_from_directory(
+            Path(current_app.root_path).parent, "openapi.yaml", mimetype="text/yaml"
+        )
+

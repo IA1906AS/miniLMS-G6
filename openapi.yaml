@@ -1,0 +1,378 @@
+openapi: 3.0.3
+info:
+  title: miniLMS-G6 API
+  description: REST API cho hệ thống quản lý học tập miniLMS (nhóm 6).
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:5000
+security:
+  - bearerAuth: []
+tags:
+  - { name: auth }
+  - { name: profile }
+  - { name: courses }
+  - { name: grades }
+  - { name: materials }
+  - { name: assignments }
+  - { name: quizzes }
+  - { name: forum }
+  - { name: announcements }
+  - { name: admin }
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Đăng nhập, trả về JWT
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } } } } }
+      responses: { "200": { description: accessToken + expiresIn }, "401": { description: Sai thông tin }, "429": { description: Tài khoản bị khoá } }
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Đăng ký tài khoản STUDENT
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, password, passwordConfirmation], properties: { email: { type: string }, password: { type: string, minLength: 8 }, passwordConfirmation: { type: string } } } } } }
+      responses: { "201": { description: Đã tạo }, "400": { description: Sai dữ liệu }, "409": { description: Email tồn tại } }
+  /auth/forgot-password:
+    post:
+      tags: [auth]
+      summary: Xin OTP đặt lại mật khẩu (lab trả OTP trong response)
+      security: []
+      responses: { "200": { description: OTP đã gửi } }
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      summary: Đặt lại mật khẩu bằng OTP
+      security: []
+      responses: { "200": { description: Đã đổi }, "400": { description: OTP sai } }
+  /auth/change-password:
+    post:
+      tags: [auth]
+      summary: Đổi mật khẩu (xác nhận mật khẩu hiện tại)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [currentPassword, newPassword], properties: { currentPassword: { type: string }, newPassword: { type: string, minLength: 8 } } } } } }
+      responses: { "200": { description: Đã đổi, token hiện tại bị thu hồi }, "400": { description: Mật khẩu hiện tại sai } }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Đăng xuất (thu hồi token phía server)
+      responses: { "200": { description: Đã đăng xuất } }
+
+  /me:
+    get:
+      tags: [profile]
+      summary: Thông tin tài khoản hiện tại
+      responses: { "200": { description: id, email, role, fullName, bio, phone, avatarUrl } }
+    put:
+      tags: [profile]
+      summary: Cập nhật hồ sơ cá nhân
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { fullName: { type: string }, bio: { type: string }, phone: { type: string } } } } } }
+      responses: { "200": { description: Hồ sơ đã cập nhật } }
+  /me/avatar:
+    post:
+      tags: [profile]
+      summary: Tải lên ảnh đại diện (png/jpg/gif, tối đa 2MB)
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, properties: { avatar: { type: string, format: binary } } } } } }
+      responses: { "200": { description: avatarUrl }, "400": { description: Sai định dạng } }
+  /members:
+    get:
+      tags: [profile]
+      summary: Thành viên (admin xem tất cả; ?courseId= xem thành viên khoá học)
+      parameters: [{ name: courseId, in: query, schema: { type: string } }]
+      responses: { "200": { description: Danh sách thành viên }, "403": { description: Không có quyền } }
+  /files/avatars/{name}:
+    get:
+      tags: [profile]
+      summary: Tải ảnh đại diện (công khai, tên tệp không đoán được)
+      security: []
+      parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Ảnh }, "404": { description: Không có } }
+
+  /api/courses:
+    get:
+      tags: [courses]
+      summary: Tra cứu khoá học (theo vai trò; ?q= tìm tên, ?instructorId= lọc giảng viên)
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: instructorId, in: query, schema: { type: string } }
+      responses: { "200": { description: Danh sách khoá học } }
+  /courses:
+    post:
+      tags: [courses]
+      summary: Giảng viên tạo khoá học kèm mã ghi danh
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [title, code], properties: { title: { type: string }, code: { type: string } } } } } }
+      responses: { "201": { description: Đã tạo }, "409": { description: Mã bị trùng } }
+  /courses/{courseId}:
+    patch:
+      tags: [courses]
+      summary: Giảng viên phụ trách / admin cập nhật khoá học
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã cập nhật }, "403": { description: Không phụ trách } }
+  /courses/enroll:
+    post:
+      tags: [courses]
+      summary: Sinh viên tự ghi danh bằng mã khoá học
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } } }
+      responses: { "201": { description: Đã ghi danh }, "404": { description: Sai mã }, "409": { description: Đã ghi danh } }
+  /courses/{courseId}/students:
+    post:
+      tags: [courses]
+      summary: Giảng viên bổ sung sinh viên vào lớp
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "201": { description: Đã thêm }, "404": { description: Không thấy sinh viên } }
+
+  /courses/{courseId}/grades:
+    get:
+      tags: [grades]
+      summary: Bảng điểm khoá học (sinh viên chỉ thấy điểm mình)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách điểm } }
+  /courses/{courseId}/grades/export:
+    get:
+      tags: [grades]
+      summary: Xuất CSV bảng điểm (bulkhead tối đa 2 lượt đồng thời)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: CSV }, "429": { description: Bulkhead đầy } }
+  /courses/{courseId}/grades/{studentId}:
+    get:
+      tags: [grades]
+      summary: Xem điểm một sinh viên
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: studentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Điểm + version }, "404": { description: Không có } }
+    put:
+      tags: [grades]
+      summary: Sửa điểm (optimistic locking qua version)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: studentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã sửa }, "409": { description: Xung đột version } }
+
+  /courses/{courseId}/materials:
+    post:
+      tags: [materials]
+      summary: Giảng viên tải tài liệu bài giảng
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, properties: { file: { type: string, format: binary } } } } } }
+      responses: { "201": { description: Đã tải lên }, "400": { description: Sai định dạng } }
+    get:
+      tags: [materials]
+      summary: Danh sách tài liệu (chỉ sinh viên đã ghi danh)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách }, "403": { description: Chưa ghi danh } }
+  /materials/{materialId}/download:
+    get:
+      tags: [materials]
+      summary: Tải tài liệu (kiểm tra quyền truy cập)
+      parameters: [{ name: materialId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Tệp }, "403": { description: Không có quyền } }
+  /materials/{materialId}:
+    delete:
+      tags: [materials]
+      summary: Xoá tài liệu (người tải lên / giảng viên phụ trách)
+      parameters: [{ name: materialId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã xoá } }
+
+  /courses/{courseId}/assignments:
+    post:
+      tags: [assignments]
+      summary: Giảng viên tạo bài tập kèm hạn nộp
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [title, dueAt], properties: { title: { type: string }, description: { type: string }, dueAt: { type: string, format: date-time } } } } } }
+      responses: { "201": { description: Đã tạo } }
+    get:
+      tags: [assignments]
+      summary: Danh sách bài tập
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách } }
+  /courses/{courseId}/assignments/{assignmentId}/submissions:
+    post:
+      tags: [assignments]
+      summary: Sinh viên nộp bài (tệp, chỉ trong hạn; nộp lại ghi đè)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: assignmentId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, properties: { file: { type: string, format: binary } } } } } }
+      responses: { "201": { description: Đã nộp }, "409": { description: Quá hạn nộp } }
+    get:
+      tags: [assignments]
+      summary: Truy xuất bài nộp (sinh viên xem mình, giảng viên xem cả lớp)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: assignmentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách bài nộp } }
+  /assignments/submissions/{submissionId}/download:
+    get:
+      tags: [assignments]
+      summary: Tải tệp bài nộp (chủ sở hữu / giảng viên phụ trách / admin)
+      parameters: [{ name: submissionId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Tệp }, "403": { description: Không có quyền } }
+  /courses/{courseId}/assignments/{assignmentId}/submissions/{studentId}/grade:
+    post:
+      tags: [assignments]
+      summary: Giảng viên chấm điểm và nhận xét bài nộp
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: assignmentId, in: path, required: true, schema: { type: string } }, { name: studentId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [score], properties: { score: { type: number, minimum: 0, maximum: 10 }, feedback: { type: string } } } } } }
+      responses: { "200": { description: Đã chấm }, "404": { description: Chưa nộp bài } }
+
+  /courses/{courseId}/quizzes:
+    post:
+      tags: [quizzes]
+      summary: Giảng viên tạo bài kiểm tra (câu hỏi, đáp án, điểm)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/QuizCreate" } } } }
+      responses: { "201": { description: Đã tạo } }
+    get:
+      tags: [quizzes]
+      summary: Danh sách bài kiểm tra
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách } }
+  /courses/{courseId}/quizzes/{quizId}:
+    get:
+      tags: [quizzes]
+      summary: Chi tiết bài kiểm tra (đáp án chỉ hiện với giảng viên/admin)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: quizId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Chi tiết + questions }, "403": { description: Chưa ghi danh } }
+  /courses/{courseId}/quizzes/{quizId}/attempts:
+    post:
+      tags: [quizzes]
+      summary: Sinh viên bắt đầu làm bài (máy trạng thái, một lượt duy nhất)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: quizId, in: path, required: true, schema: { type: string } }]
+      responses: { "201": { description: IN_PROGRESS + deadline }, "409": { description: Đã có lượt } }
+    get:
+      tags: [quizzes]
+      summary: Danh sách lượt làm bài
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: quizId, in: path, required: true, schema: { type: string } }, { name: studentId, in: query, schema: { type: string } }]
+      responses: { "200": { description: Danh sách } }
+  /courses/{courseId}/quizzes/{quizId}/attempts/answers:
+    put:
+      tags: [quizzes]
+      summary: Lưu câu trả lời (chỉ khi IN_PROGRESS)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: quizId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [answers], properties: { answers: { type: string, example: "A,B,C" } } } } } }
+      responses: { "200": { description: Đã lưu }, "409": { description: Trạng thái không cho phép } }
+  /courses/{courseId}/quizzes/{quizId}/attempts/submit:
+    post:
+      tags: [quizzes]
+      summary: Nộp bài (chấm tự động phía server nếu có đáp án)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: quizId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: SUBMITTED + score tự động }, "409": { description: Quá hạn / sai trạng thái } }
+  /courses/{courseId}/quizzes/{quizId}/attempts/{studentId}/grade:
+    post:
+      tags: [quizzes]
+      summary: Giảng viên xác nhận/điều chỉnh điểm, chuyển GRADED
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }, { name: quizId, in: path, required: true, schema: { type: string } }, { name: studentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: GRADED }, "409": { description: Chưa nộp } }
+
+  /courses/{courseId}/topics:
+    post:
+      tags: [forum]
+      summary: Tạo chủ đề diễn đàn
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "201": { description: Đã tạo } }
+    get:
+      tags: [forum]
+      summary: Danh sách chủ đề
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách } }
+  /topics/{topicId}:
+    get:
+      tags: [forum]
+      summary: Xem chủ đề
+      parameters: [{ name: topicId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Chủ đề } }
+    put:
+      tags: [forum]
+      summary: Sửa chủ đề (chỉ tác giả)
+      parameters: [{ name: topicId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã sửa }, "403": { description: Không phải tác giả } }
+    delete:
+      tags: [forum]
+      summary: Xoá chủ đề (chỉ tác giả)
+      parameters: [{ name: topicId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã xoá }, "403": { description: Không phải tác giả } }
+  /topics/{topicId}/comments:
+    post:
+      tags: [forum]
+      summary: Bình luận vào chủ đề
+      parameters: [{ name: topicId, in: path, required: true, schema: { type: string } }]
+      responses: { "201": { description: Đã bình luận } }
+    get:
+      tags: [forum]
+      summary: Danh sách bình luận
+      parameters: [{ name: topicId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách } }
+  /comments/{commentId}:
+    put:
+      tags: [forum]
+      summary: Sửa bình luận (chỉ tác giả)
+      parameters: [{ name: commentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã sửa }, "403": { description: Không phải tác giả } }
+    delete:
+      tags: [forum]
+      summary: Xoá bình luận (chỉ tác giả)
+      parameters: [{ name: commentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã xoá } }
+
+  /courses/{courseId}/announcements:
+    post:
+      tags: [announcements]
+      summary: Giảng viên phát thông báo (email ở chế độ lab)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "201": { description: Đã phát } }
+    get:
+      tags: [announcements]
+      summary: Danh sách thông báo
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Danh sách } }
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: Tra cứu người dùng (?q= theo email/họ tên)
+      parameters: [{ name: q, in: query, schema: { type: string } }]
+      responses: { "200": { description: Danh sách } }
+  /admin/users/{userId}:
+    patch:
+      tags: [admin]
+      summary: Đổi vai trò / khoá-mở khoá tài khoản (không áp dụng cho chính mình)
+      parameters: [{ name: userId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { role: { type: string, enum: [ADMIN, INSTRUCTOR, STUDENT] }, locked: { type: boolean } } } } } }
+      responses: { "200": { description: Đã cập nhật }, "403": { description: Tự sửa mình } }
+  /admin/courses/{courseId}:
+    delete:
+      tags: [admin]
+      summary: Gỡ khoá học khỏi hệ thống (cascade dữ liệu liên quan)
+      parameters: [{ name: courseId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã xoá } }
+  /admin/audit:
+    get:
+      tags: [admin]
+      summary: Nhật ký hoạt động (mới nhất trước, ?limit=)
+      parameters: [{ name: limit, in: query, schema: { type: integer, default: 200 } }]
+      responses: { "200": { description: Danh sách sự kiện } }
+
+  /api/openapi.yaml:
+    get:
+      tags: [admin]
+      summary: Tài liệu OpenAPI này
+      security: []
+      responses: { "200": { description: openapi.yaml } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    QuizCreate:
+      type: object
+      required: [title, questions]
+      properties:
+        title: { type: string }
+        timeMinutes: { type: integer, default: 30 }
+        questions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [text, options, answerIndex]
+            properties:
+              text: { type: string }
+              options: { type: array, items: { type: string }, minItems: 2, maxItems: 6 }
+              answerIndex: { type: integer, minimum: 0 }
+              points: { type: integer, minimum: 1, maximum: 10, default: 1 }
