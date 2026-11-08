@@ -16,5 +16,10 @@
     { "courseId": "c1", "studentId": "u5", "score": 8.0 },
     { "courseId": "c2", "studentId": "u5", "score": 6.0 },
     { "courseId": "c2", "studentId": "u6", "score": 9.0 }
+  ],
+  "quizAttempts": [
+    { "id": "a1", "courseId": "c1", "quizId": "q1", "studentId": "u4", "answers": "B,A,C", "state": "IN_PROGRESS", "deadlineOffsetMinutes": 120 },
+    { "id": "a2", "courseId": "c1", "quizId": "q1", "studentId": "u5", "answers": "A,B,C", "state": "SUBMITTED", "deadlineOffsetMinutes": -60 },
+    { "id": "a3", "courseId": "c2", "quizId": "q1", "studentId": "u6", "answers": "C,B,A", "state": "IN_PROGRESS", "deadlineOffsetMinutes": -60 }
   ]
 }

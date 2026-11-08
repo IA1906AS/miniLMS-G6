@@ -10,6 +10,8 @@ Các bảng cần tồn tại (xem db_init.py):
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import bcrypt
 
 from .db import get_conn, get_cursor
@@ -296,6 +298,135 @@ class PgStore:
                         return None
                     raise Conflict("Điểm đã bị thay đổi bởi người khác, vui lòng tải lại")
                 return dict(row)
+
+    # ------------------------------------------------------------------ #
+    #  Quiz attempt queries (P7)                                          #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _attempt_public(row: dict) -> dict:
+        return {
+            "id": row["id"],
+            "courseId": row["course_id"],
+            "quizId": row["quiz_id"],
+            "studentId": row["student_id"],
+            "answers": row["answers"],
+            "score": float(row["score"]) if row["score"] is not None else None,
+            "state": row["state"],
+            "deadline": row["deadline"].isoformat(),
+        }
+
+    def get_attempt(self, cid: str, quiz: str, sid: str) -> dict | None:
+        """Trả về lượt làm bài theo (course, quiz, student) hoặc None."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, quiz_id, student_id, answers,
+                           score, state, deadline
+                    FROM quiz_attempts
+                    WHERE course_id = %s AND quiz_id = %s AND student_id = %s
+                    LIMIT 1
+                    """,
+                    (cid, quiz, sid),
+                )
+                row = cur.fetchone()
+        return self._attempt_public(dict(row)) if row else None
+
+    def list_attempts(self, cid: str, quiz: str) -> list[dict]:
+        """Trả về mọi lượt làm bài của một quiz, kèm trạng thái."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    "SELECT id, course_id, quiz_id, student_id, answers, "
+                    "score, state, deadline FROM quiz_attempts "
+                    "WHERE course_id = %s AND quiz_id = %s ORDER BY student_id",
+                    (cid, quiz),
+                )
+                rows = cur.fetchall()
+        return [self._attempt_public(dict(r)) for r in rows]
+
+    def start_attempt(
+        self, cid: str, quiz: str, sid: str, deadline
+    ) -> dict:
+        """Bắt đầu lượt làm bài. Bản chưa có máy trạng thái: ghi đè lượt cũ."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO quiz_attempts
+                        (id, course_id, quiz_id, student_id, answers, state, deadline)
+                    VALUES (%s, %s, %s, %s, '', 'IN_PROGRESS', %s)
+                    ON CONFLICT (course_id, quiz_id, student_id) DO UPDATE
+                    SET state = 'IN_PROGRESS', answers = '',
+                        deadline = EXCLUDED.deadline, updated_at = NOW()
+                    RETURNING id, course_id, quiz_id, student_id, answers,
+                              score, state, deadline
+                    """,
+                    (uuid4().hex, cid, quiz, sid, deadline),
+                )
+                row = cur.fetchone()
+        return self._attempt_public(dict(row))
+
+    def save_answers(self, cid: str, quiz: str, sid: str, answers: str) -> dict:
+        """Lưu câu trả lời. Bản chưa có máy trạng thái: upsert — sửa được ở mọi trạng thái, kể cả sau khi nộp."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO quiz_attempts
+                        (id, course_id, quiz_id, student_id, answers, state, deadline)
+                    VALUES (%s, %s, %s, %s, %s, 'IN_PROGRESS', NOW())
+                    ON CONFLICT (course_id, quiz_id, student_id) DO UPDATE
+                    SET answers = EXCLUDED.answers, updated_at = NOW()
+                    RETURNING id, course_id, quiz_id, student_id, answers,
+                              score, state, deadline
+                    """,
+                    (uuid4().hex, cid, quiz, sid, answers),
+                )
+                row = cur.fetchone()
+        return self._attempt_public(dict(row))
+
+    def submit_attempt(self, cid: str, quiz: str, sid: str, answers: str) -> dict:
+        """Nộp bài. Bản chưa có máy trạng thái: upsert — bỏ qua bước bắt đầu, không kiểm tra hạn nộp."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO quiz_attempts
+                        (id, course_id, quiz_id, student_id, answers, state, deadline)
+                    VALUES (%s, %s, %s, %s, %s, 'SUBMITTED', NOW())
+                    ON CONFLICT (course_id, quiz_id, student_id) DO UPDATE
+                    SET answers = EXCLUDED.answers, state = 'SUBMITTED',
+                        updated_at = NOW()
+                    RETURNING id, course_id, quiz_id, student_id, answers,
+                              score, state, deadline
+                    """,
+                    (uuid4().hex, cid, quiz, sid, answers),
+                )
+                row = cur.fetchone()
+        return self._attempt_public(dict(row))
+
+    def grade_attempt(self, cid: str, quiz: str, sid: str, score: float) -> dict:
+        """Chấm điểm. Bản chưa có máy trạng thái: chấm được ở mọi trạng thái."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO quiz_attempts
+                        (id, course_id, quiz_id, student_id, answers, score,
+                         state, deadline)
+                    VALUES (%s, %s, %s, %s, '', %s, 'GRADED', NOW())
+                    ON CONFLICT (course_id, quiz_id, student_id) DO UPDATE
+                    SET score = EXCLUDED.score, state = 'GRADED',
+                        updated_at = NOW()
+                    RETURNING id, course_id, quiz_id, student_id, answers,
+                              score, state, deadline
+                    """,
+                    (uuid4().hex, cid, quiz, sid, score),
+                )
+                row = cur.fetchone()
+        return self._attempt_public(dict(row))
 
     # ------------------------------------------------------------------ #
     #  Compatibility shim: thuộc tính .courses cho pages.py               #
