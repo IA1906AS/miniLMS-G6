@@ -575,3 +575,86 @@ def register_routes(app):
         store = current_app.extensions["store"]
         quiz = services.get_quiz(g.actor, course_id, quiz_id, store=store)
         return jsonify(quiz), 200
+
+    # ── Forum ───────────────────────────────────────────────────────────
+
+    @app.post("/courses/<course_id>/topics")
+    def create_topic(course_id):
+        store = current_app.extensions["store"]
+        topic = services.create_topic(
+            g.actor, course_id, request.get_json(silent=True), store=store
+        )
+        return jsonify(topic), 201
+
+    @app.get("/courses/<course_id>/topics")
+    def list_topics(course_id):
+        store = current_app.extensions["store"]
+        rows = services.list_topics(g.actor, course_id, store=store)
+        return jsonify(rows), 200
+
+    @app.put("/topics/<topic_id>")
+    def update_topic(topic_id):
+        store = current_app.extensions["store"]
+        topic = services.update_topic(
+            g.actor, topic_id, request.get_json(silent=True), store=store
+        )
+        return jsonify(topic), 200
+
+    @app.delete("/topics/<topic_id>")
+    def delete_topic(topic_id):
+        store = current_app.extensions["store"]
+        result = services.delete_topic(g.actor, topic_id, store=store)
+        return jsonify(result), 200
+
+    @app.post("/topics/<topic_id>/comments")
+    def create_comment(topic_id):
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        text = body.get("body") if isinstance(body, dict) else None
+        comment = services.create_comment(g.actor, topic_id, text, store=store)
+        return jsonify(comment), 201
+
+    @app.get("/topics/<topic_id>/comments")
+    def list_comments(topic_id):
+        store = current_app.extensions["store"]
+        rows = services.list_comments(g.actor, topic_id, store=store)
+        return jsonify(rows), 200
+
+    @app.put("/comments/<comment_id>")
+    def update_comment(comment_id):
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        text = body.get("body") if isinstance(body, dict) else None
+        comment = services.update_comment(g.actor, comment_id, text, store=store)
+        return jsonify(comment), 200
+
+    @app.delete("/comments/<comment_id>")
+    def delete_comment(comment_id):
+        store = current_app.extensions["store"]
+        result = services.delete_comment(g.actor, comment_id, store=store)
+        return jsonify(result), 200
+
+    # ── Announcements ───────────────────────────────────────────────────
+
+    @app.post("/courses/<course_id>/announcements")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def create_announcement(course_id):
+        store = current_app.extensions["store"]
+        announcement = services.create_announcement(
+            g.actor, course_id, request.get_json(silent=True), store=store
+        )
+        log_event(
+            g.actor["id"],
+            "ANNOUNCE",
+            f"{course_id}/{announcement['id']}",
+            "SUCCESS",
+            emailQueued=True,
+        )
+        # ponytail: no SMTP in lab; email delivery is logged only
+        return jsonify({**announcement, "emailQueued": True}), 201
+
+    @app.get("/courses/<course_id>/announcements")
+    def list_announcements(course_id):
+        store = current_app.extensions["store"]
+        rows = services.list_announcements(g.actor, course_id, store=store)
+        return jsonify(rows), 200

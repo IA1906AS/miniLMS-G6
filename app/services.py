@@ -635,3 +635,123 @@ def _autograde(store, course_id, quiz_id, student_id, answers_text):
     score = round(10 * earned / total, 1)
     store.set_attempt_score(course_id, quiz_id, student_id, score)
     return score
+
+
+# ------------------------------------------------------------------ #
+#  Forum and announcements                                            #
+# ------------------------------------------------------------------ #
+
+
+def _validate_post_fields(payload, *, title_max=200, body_max=2000):
+    if not isinstance(payload, dict):
+        raise ValidationError()
+    title = payload.get("title", "")
+    body = payload.get("body", "")
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= title_max:
+        raise ValidationError()
+    if not isinstance(body, str) or not 1 <= len(body.strip()) <= body_max:
+        raise ValidationError()
+    return title.strip(), body.strip()
+
+
+def create_topic(actor, course_id, payload, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _course_visible(current, actor, course_id)
+    title, body = _validate_post_fields(payload)
+    return current.create_topic(course_id, actor["id"], title, body)
+
+
+def list_topics(actor, course_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _course_visible(current, actor, course_id)
+    return current.list_topics(course_id)
+
+
+def _own_topic(store, actor, topic_id):
+    topic = store.get_topic(topic_id)
+    if topic is None:
+        raise NotFound()
+    # Spec: users may only edit or delete their own content.
+    if topic["authorId"] != actor["id"]:
+        raise Forbidden()
+    return topic
+
+
+def update_topic(actor, topic_id, payload, *, store=None):
+    current = _get_store(store)
+    topic = _own_topic(current, actor, topic_id)
+    title, body = _validate_post_fields(payload)
+    return current.update_topic(topic["id"], title, body)
+
+
+def delete_topic(actor, topic_id, *, store=None):
+    current = _get_store(store)
+    topic = _own_topic(current, actor, topic_id)
+    current.delete_topic(topic["id"])
+    return {"message": "Deleted"}
+
+
+def _visible_topic(store, actor, topic_id):
+    topic = store.get_topic(topic_id)
+    if topic is None:
+        raise NotFound()
+    _course_visible(store, actor, topic["courseId"])
+    return topic
+
+
+def create_comment(actor, topic_id, body, *, store=None):
+    current = _get_store(store)
+    topic = _visible_topic(current, actor, topic_id)
+    if not isinstance(body, str) or not 1 <= len(body.strip()) <= 2000:
+        raise ValidationError()
+    return current.create_comment(topic["id"], actor["id"], body.strip())
+
+
+def list_comments(actor, topic_id, *, store=None):
+    current = _get_store(store)
+    topic = _visible_topic(current, actor, topic_id)
+    return current.list_comments(topic["id"])
+
+
+def _own_comment(store, actor, comment_id):
+    comment = store.get_comment(comment_id)
+    if comment is None:
+        raise NotFound()
+    if comment["author_id"] != actor["id"]:
+        raise Forbidden()
+    return comment
+
+
+def update_comment(actor, comment_id, body, *, store=None):
+    current = _get_store(store)
+    comment = _own_comment(current, actor, comment_id)
+    if not isinstance(body, str) or not 1 <= len(body.strip()) <= 2000:
+        raise ValidationError()
+    return current.update_comment(comment["id"], body.strip())
+
+
+def delete_comment(actor, comment_id, *, store=None):
+    current = _get_store(store)
+    comment = _own_comment(current, actor, comment_id)
+    current.delete_comment(comment["id"])
+    return {"message": "Deleted"}
+
+
+def create_announcement(actor, course_id, payload, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    if actor["role"] != "ADMIN" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    title, body = _validate_post_fields(payload)
+    return current.create_announcement(course_id, actor["id"], title, body)
+
+
+def list_announcements(actor, course_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _course_visible(current, actor, course_id)
+    return current.list_announcements(course_id)

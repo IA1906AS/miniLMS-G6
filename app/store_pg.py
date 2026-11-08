@@ -811,6 +811,210 @@ class PgStore:
         return dict(row) if row else None
 
     # ------------------------------------------------------------------ #
+    #  Forum and announcements                                            #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _topic_public(row: dict) -> dict:
+        out = {
+            "id": row["id"],
+            "courseId": row["course_id"],
+            "authorId": row["author_id"],
+            "title": row["title"],
+            "body": row["body"],
+            "createdAt": row["created_at"].isoformat(),
+            "updatedAt": row["updated_at"].isoformat(),
+        }
+        if "comment_count" in row:
+            out["commentCount"] = int(row["comment_count"])
+        return out
+
+    @staticmethod
+    def _comment_public(row: dict) -> dict:
+        return {
+            "id": row["id"],
+            "topicId": row["topic_id"],
+            "authorId": row["author_id"],
+            "body": row["body"],
+            "createdAt": row["created_at"].isoformat(),
+            "updatedAt": row["updated_at"].isoformat(),
+        }
+
+    def create_topic(self, cid: str, author_id: str, title: str, body: str) -> dict:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO topics (id, course_id, author_id, title, body)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id, course_id, author_id, title, body,
+                              created_at, updated_at
+                    """,
+                    (uuid4().hex, cid, author_id, title, body),
+                )
+                row = cur.fetchone()
+        return self._topic_public(dict(row))
+
+    def list_topics(self, cid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT t.id, t.course_id, t.author_id, t.title, t.body,
+                           t.created_at, t.updated_at,
+                           (SELECT COUNT(*) FROM comments c
+                            WHERE c.topic_id = t.id) AS comment_count
+                    FROM topics t WHERE t.course_id = %s
+                    ORDER BY t.created_at DESC, t.id
+                    """,
+                    (cid,),
+                )
+                rows = cur.fetchall()
+        return [self._topic_public(dict(r)) for r in rows]
+
+    def get_topic(self, tid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, author_id, title, body,
+                           created_at, updated_at
+                    FROM topics WHERE id = %s LIMIT 1
+                    """,
+                    (tid,),
+                )
+                row = cur.fetchone()
+        return self._topic_public(dict(row)) if row else None
+
+    def update_topic(self, tid: str, title: str, body: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    UPDATE topics SET title = %s, body = %s, updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id, course_id, author_id, title, body,
+                              created_at, updated_at
+                    """,
+                    (title, body, tid),
+                )
+                row = cur.fetchone()
+        return self._topic_public(dict(row)) if row else None
+
+    def delete_topic(self, tid: str) -> bool:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute("DELETE FROM topics WHERE id = %s", (tid,))
+                return cur.rowcount > 0
+
+    def create_comment(self, tid: str, author_id: str, body: str) -> dict:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO comments (id, topic_id, author_id, body)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, topic_id, author_id, body,
+                              created_at, updated_at
+                    """,
+                    (uuid4().hex, tid, author_id, body),
+                )
+                row = cur.fetchone()
+        return self._comment_public(dict(row))
+
+    def list_comments(self, tid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, topic_id, author_id, body, created_at, updated_at
+                    FROM comments WHERE topic_id = %s
+                    ORDER BY created_at, id
+                    """,
+                    (tid,),
+                )
+                rows = cur.fetchall()
+        return [self._comment_public(dict(r)) for r in rows]
+
+    def get_comment(self, coid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT c.id, c.topic_id, c.author_id, c.body,
+                           c.created_at, c.updated_at, t.course_id
+                    FROM comments c JOIN topics t ON t.id = c.topic_id
+                    WHERE c.id = %s LIMIT 1
+                    """,
+                    (coid,),
+                )
+                row = cur.fetchone()
+        return dict(row) if row else None
+
+    def update_comment(self, coid: str, body: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    UPDATE comments SET body = %s, updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id, topic_id, author_id, body,
+                              created_at, updated_at
+                    """,
+                    (body, coid),
+                )
+                row = cur.fetchone()
+        return self._comment_public(dict(row)) if row else None
+
+    def delete_comment(self, coid: str) -> bool:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute("DELETE FROM comments WHERE id = %s", (coid,))
+                return cur.rowcount > 0
+
+    def create_announcement(
+        self, cid: str, created_by: str, title: str, body: str
+    ) -> dict:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO announcements
+                        (id, course_id, created_by, title, body)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id, course_id, created_by, title, body, created_at
+                    """,
+                    (uuid4().hex, cid, created_by, title, body),
+                )
+                row = cur.fetchone()
+        out = dict(row)
+        out["createdBy"] = out.pop("created_by")
+        out["courseId"] = out.pop("course_id")
+        out["createdAt"] = out["created_at"].isoformat()
+        return out
+
+    def list_announcements(self, cid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, created_by, title, body, created_at
+                    FROM announcements WHERE course_id = %s
+                    ORDER BY created_at DESC, id
+                    """,
+                    (cid,),
+                )
+                rows = cur.fetchall()
+        out = []
+        for r in rows:
+            item = dict(r)
+            item["createdBy"] = item.pop("created_by")
+            item["courseId"] = item.pop("course_id")
+            item["createdAt"] = item["created_at"].isoformat()
+            out.append(item)
+        return out
+
+    # ------------------------------------------------------------------ #
     #  Enrollment / grade queries                                          #
     # ------------------------------------------------------------------ #
 
