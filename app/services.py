@@ -408,3 +408,123 @@ def delete_material(actor, material_id, *, store=None):
     if not allowed:
         raise Forbidden()
     return current.delete_material(material_id)
+
+
+# ------------------------------------------------------------------ #
+#  Assignments and submissions                                         #
+# ------------------------------------------------------------------ #
+
+
+def _parse_due_at(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ValidationError()
+    try:
+        due = datetime.fromisoformat(value.strip())
+    except ValueError:
+        raise ValidationError() from None
+    if due.tzinfo is None:
+        due = due.replace(tzinfo=timezone.utc)
+    if due <= datetime.now(timezone.utc):
+        raise ValidationError()
+    return due
+
+
+def create_assignment(actor, course_id, payload, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    if actor["role"] != "ADMIN" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    if not isinstance(payload, dict):
+        raise ValidationError()
+    title = payload.get("title", "")
+    description = payload.get("description", "")
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 200:
+        raise ValidationError()
+    if not isinstance(description, str) or len(description) > 2000:
+        raise ValidationError()
+    due_at = _parse_due_at(payload.get("dueAt"))
+    return current.create_assignment(course_id, title.strip(), description, due_at)
+
+
+def list_assignments(actor, course_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _course_visible(current, actor, course_id)
+    return current.list_assignments(course_id)
+
+
+def _assignment_of_course(store, course_id, assignment_id):
+    assignment = store.get_assignment(assignment_id)
+    if assignment is None or assignment["courseId"] != course_id:
+        raise NotFound()
+    return assignment
+
+
+def submit_assignment(
+    actor, course_id, assignment_id, stored_name, original_name, *, store=None
+):
+    current = _get_store(store)
+    _course(current, course_id)
+    _require_student_enrolled(current, actor, course_id)
+    _assignment_of_course(current, course_id, assignment_id)
+    updated = current.upsert_submission(
+        assignment_id, actor["id"], original_name, stored_name
+    )
+    if updated is None:
+        existing = current.get_submission_by_key(assignment_id, actor["id"])
+        raise DeadlinePassed() if existing else NotFound()
+    return updated
+
+
+def list_submissions(actor, course_id, assignment_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _assignment_of_course(current, course_id, assignment_id)
+    if actor["role"] in ("ADMIN", "INSTRUCTOR"):
+        if actor["role"] == "INSTRUCTOR" and not current.is_instructor_of(
+            actor["id"], course_id
+        ):
+            raise Forbidden()
+        return current.list_submissions(assignment_id)
+    _require_student_enrolled(current, actor, course_id)
+    return current.list_submissions(assignment_id, student_id=actor["id"])
+
+
+def get_submission_file(actor, submission_id, *, store=None):
+    current = _get_store(store)
+    submission = current.get_submission_file(submission_id)
+    if submission is None:
+        raise NotFound()
+    if actor["role"] == "ADMIN":
+        return submission
+    if actor["role"] == "INSTRUCTOR":
+        if current.is_instructor_of(actor["id"], submission["course_id"]):
+            return submission
+    elif submission["student_id"] == actor["id"]:
+        return submission
+    raise Forbidden()
+
+
+def grade_submission(
+    actor, course_id, assignment_id, student_id, score, feedback, *, store=None
+):
+    current = _get_store(store)
+    _course(current, course_id)
+    _assignment_of_course(current, course_id, assignment_id)
+    if actor["role"] != "ADMIN" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    validated_score = validate_score(score)
+    if feedback is None:
+        feedback = ""
+    if not isinstance(feedback, str) or len(feedback) > 1000:
+        raise ValidationError()
+    graded = current.grade_submission(
+        assignment_id, student_id, validated_score, feedback
+    )
+    if graded is None:
+        raise NotFound()
+    return graded

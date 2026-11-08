@@ -535,6 +535,169 @@ class PgStore:
         return dict(row) if row else None
 
     # ------------------------------------------------------------------ #
+    #  Assignments and submissions                                        #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _assignment_public(row: dict) -> dict:
+        return {
+            "id": row["id"],
+            "courseId": row["course_id"],
+            "title": row["title"],
+            "description": row["description"],
+            "dueAt": row["due_at"].isoformat(),
+            "createdAt": row["created_at"].isoformat(),
+        }
+
+    @staticmethod
+    def _submission_public(row: dict) -> dict:
+        graded_at = row.get("graded_at")
+        return {
+            "id": row["id"],
+            "assignmentId": row["assignment_id"],
+            "studentId": row["student_id"],
+            "originalName": row["original_name"],
+            "submittedAt": row["submitted_at"].isoformat(),
+            "score": float(row["score"]) if row.get("score") is not None else None,
+            "feedback": row.get("feedback"),
+            "gradedAt": graded_at.isoformat() if graded_at else None,
+            "downloadUrl": f"/assignments/submissions/{row['id']}/download",
+        }
+
+    def create_assignment(
+        self, cid: str, title: str, description: str, due_at
+    ) -> dict:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO assignments (id, course_id, title, description, due_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id, course_id, title, description, due_at, created_at
+                    """,
+                    (uuid4().hex, cid, title, description, due_at),
+                )
+                row = cur.fetchone()
+        return self._assignment_public(dict(row))
+
+    def list_assignments(self, cid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, title, description, due_at, created_at
+                    FROM assignments WHERE course_id = %s
+                    ORDER BY due_at, id
+                    """,
+                    (cid,),
+                )
+                rows = cur.fetchall()
+        return [self._assignment_public(dict(r)) for r in rows]
+
+    def get_assignment(self, aid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, title, description, due_at, created_at
+                    FROM assignments WHERE id = %s LIMIT 1
+                    """,
+                    (aid,),
+                )
+                row = cur.fetchone()
+        return self._assignment_public(dict(row)) if row else None
+
+    def upsert_submission(
+        self, aid: str, sid: str, original_name: str, stored_name: str
+    ) -> dict | None:
+        """Insert or re-upload a submission; the due-date guard lives in the SELECT."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO submissions
+                        (id, assignment_id, student_id, original_name, stored_name)
+                    SELECT %s, a.id, %s, %s, %s
+                    FROM assignments a
+                    WHERE a.id = %s AND NOW() <= a.due_at
+                    ON CONFLICT (assignment_id, student_id) DO UPDATE
+                    SET original_name = EXCLUDED.original_name,
+                        stored_name = EXCLUDED.stored_name,
+                        submitted_at = NOW()
+                    RETURNING id, assignment_id, student_id, original_name,
+                              submitted_at, score, feedback, graded_at
+                    """,
+                    (uuid4().hex, sid, original_name, stored_name, aid),
+                )
+                row = cur.fetchone()
+        return self._submission_public(dict(row)) if row else None
+
+    def list_submissions(self, aid: str, student_id: str | None = None) -> list[dict]:
+        sql = (
+            "SELECT id, assignment_id, student_id, original_name, submitted_at, "
+            "score, feedback, graded_at FROM submissions"
+        )
+        where = ["assignment_id = %s"]
+        params: list = [aid]
+        if student_id:
+            where.append("student_id = %s")
+            params.append(student_id)
+        sql += " WHERE " + " AND ".join(where) + " ORDER BY student_id"
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+        return [self._submission_public(dict(r)) for r in rows]
+
+    def get_submission_by_key(self, aid: str, sid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, assignment_id, student_id, original_name,
+                           submitted_at, score, feedback, graded_at
+                    FROM submissions
+                    WHERE assignment_id = %s AND student_id = %s LIMIT 1
+                    """,
+                    (aid, sid),
+                )
+                row = cur.fetchone()
+        return self._submission_public(dict(row)) if row else None
+
+    def get_submission_file(self, sub_id: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT s.id, s.student_id, s.original_name, s.stored_name,
+                           a.course_id
+                    FROM submissions s JOIN assignments a ON a.id = s.assignment_id
+                    WHERE s.id = %s LIMIT 1
+                    """,
+                    (sub_id,),
+                )
+                row = cur.fetchone()
+        return dict(row) if row else None
+
+    def grade_submission(
+        self, aid: str, sid: str, score: float, feedback: str
+    ) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    UPDATE submissions
+                    SET score = %s, feedback = %s, graded_at = NOW()
+                    WHERE assignment_id = %s AND student_id = %s
+                    RETURNING id, assignment_id, student_id, original_name,
+                              submitted_at, score, feedback, graded_at
+                    """,
+                    (score, feedback, aid, sid),
+                )
+                row = cur.fetchone()
+        return self._submission_public(dict(row)) if row else None
+
+    # ------------------------------------------------------------------ #
     #  Enrollment / grade queries                                          #
     # ------------------------------------------------------------------ #
 

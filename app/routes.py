@@ -465,3 +465,90 @@ def register_routes(app):
             current_app.config["UPLOAD_DIR"], "materials", removed["stored_name"]
         )
         return {"message": "Deleted"}, 200
+
+    # ── Assignments and submissions ─────────────────────────────────────
+
+    @app.post("/courses/<course_id>/assignments")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def create_assignment(course_id):
+        store = current_app.extensions["store"]
+        assignment = services.create_assignment(
+            g.actor, course_id, request.get_json(silent=True), store=store
+        )
+        return jsonify(assignment), 201
+
+    @app.get("/courses/<course_id>/assignments")
+    def list_assignments(course_id):
+        store = current_app.extensions["store"]
+        rows = services.list_assignments(g.actor, course_id, store=store)
+        return jsonify(rows), 200
+
+    @app.post(
+        "/courses/<course_id>/assignments/<assignment_id>/submissions"
+    )
+    @require_role("STUDENT")
+    def submit_assignment(course_id, assignment_id):
+        storage = request.files.get("file")
+        if storage is None:
+            raise ValidationError()
+        stored, original, _size = files.save_upload(
+            current_app.config["UPLOAD_DIR"], storage, "submissions"
+        )
+        store = current_app.extensions["store"]
+        try:
+            submission = services.submit_assignment(
+                g.actor, course_id, assignment_id, stored, original, store=store
+            )
+        except Exception:
+            files.delete_upload(
+                current_app.config["UPLOAD_DIR"], "submissions", stored
+            )
+            raise
+        return jsonify(submission), 201
+
+    @app.get(
+        "/courses/<course_id>/assignments/<assignment_id>/submissions"
+    )
+    def list_submissions(course_id, assignment_id):
+        store = current_app.extensions["store"]
+        rows = services.list_submissions(
+            g.actor, course_id, assignment_id, store=store
+        )
+        return jsonify(rows), 200
+
+    @app.get("/assignments/submissions/<submission_id>/download")
+    def download_submission(submission_id):
+        store = current_app.extensions["store"]
+        submission = services.get_submission_file(
+            g.actor, submission_id, store=store
+        )
+        path = files.upload_path(
+            current_app.config["UPLOAD_DIR"],
+            "submissions",
+            submission["stored_name"],
+        )
+        return send_file(
+            path, as_attachment=True, download_name=submission["original_name"]
+        )
+
+    @app.post(
+        "/courses/<course_id>/assignments/<assignment_id>/submissions"
+        "/<student_id>/grade"
+    )
+    @require_role("INSTRUCTOR", "ADMIN")
+    def grade_submission(course_id, assignment_id, student_id):
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        score = body.get("score") if isinstance(body, dict) else None
+        feedback = body.get("feedback") if isinstance(body, dict) else None
+        submission = services.grade_submission(
+            g.actor, course_id, assignment_id, student_id, score, feedback, store=store
+        )
+        log_event(
+            g.actor["id"],
+            "GRADE_SUBMISSION",
+            f"{course_id}/{assignment_id}/{student_id}",
+            "SUCCESS",
+            score=submission["score"],
+        )
+        return jsonify(submission), 200
