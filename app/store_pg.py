@@ -45,7 +45,11 @@ class PgStore:
         with get_conn() as conn:
             with get_cursor(conn) as cur:
                 cur.execute(
-                    "SELECT id, email, role FROM users WHERE email = %s LIMIT 1",
+                    """
+                    SELECT id, email, role, full_name, bio, phone,
+                           avatar_path, locked
+                    FROM users WHERE email = %s LIMIT 1
+                    """,
                     (email,),
                 )
                 row = cur.fetchone()
@@ -56,7 +60,11 @@ class PgStore:
         with get_conn() as conn:
             with get_cursor(conn) as cur:
                 cur.execute(
-                    "SELECT id, email, role FROM users WHERE id = %s LIMIT 1",
+                    """
+                    SELECT id, email, role, full_name, bio, phone,
+                           avatar_path, locked
+                    FROM users WHERE id = %s LIMIT 1
+                    """,
                     (uid,),
                 )
                 row = cur.fetchone()
@@ -123,6 +131,106 @@ class PgStore:
                     (pw_hash.decode("utf-8"), uid),
                 )
                 return cur.rowcount > 0
+
+    @staticmethod
+    def _member_public(row: dict) -> dict:
+        out = {
+            "id": row["id"],
+            "email": row["email"],
+            "role": row["role"],
+            "fullName": row["full_name"],
+        }
+        out["avatarUrl"] = (
+            f"/files/avatars/{row['avatar_path']}" if row.get("avatar_path") else None
+        )
+        return out
+
+    def update_user_profile(self, uid: str, full_name: str, bio: str, phone: str) -> bool:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    "UPDATE users SET full_name = %s, bio = %s, phone = %s "
+                    "WHERE id = %s",
+                    (full_name, bio, phone, uid),
+                )
+                return cur.rowcount > 0
+
+    def set_avatar(self, uid: str, stored_name: str) -> bool:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    "UPDATE users SET avatar_path = %s WHERE id = %s",
+                    (stored_name, uid),
+                )
+                return cur.rowcount > 0
+
+    def list_users(self, q: str | None = None) -> list[dict]:
+        sql = (
+            "SELECT id, email, role, full_name, avatar_path, locked "
+            "FROM users"
+        )
+        params: tuple = ()
+        if q:
+            like = f"%{q}%"
+            sql += " WHERE email ILIKE %s OR full_name ILIKE %s"
+            params = (like, like)
+        sql += " ORDER BY id"
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+        out = []
+        for r in rows:
+            member = self._member_public(dict(r))
+            member["locked"] = bool(r["locked"])
+            out.append(member)
+        return out
+
+    def list_course_members(self, cid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, email, role, full_name, avatar_path
+                    FROM users
+                    WHERE id = (SELECT instructor_id FROM courses WHERE id = %s)
+                       OR id IN (SELECT student_id FROM enrollments WHERE course_id = %s)
+                    ORDER BY role, id
+                    """,
+                    (cid, cid),
+                )
+                rows = cur.fetchall()
+        return [self._member_public(dict(r)) for r in rows]
+
+    def set_user_lock(self, uid: str, locked: bool) -> bool:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    "UPDATE users SET locked = %s WHERE id = %s", (locked, uid)
+                )
+                return cur.rowcount > 0
+
+    def set_user_role(self, uid: str, role: str) -> bool:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    "UPDATE users SET role = %s WHERE id = %s", (role, uid)
+                )
+                return cur.rowcount > 0
+
+    def delete_user_avatar(self, uid: str) -> str | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    UPDATE users SET avatar_path = NULL
+                    WHERE id = %s AND avatar_path IS NOT NULL
+                    RETURNING avatar_path
+                    """,
+                    (uid,),
+                )
+                row = cur.fetchone()
+        return dict(row)["avatar_path"] if row else None
 
     # ------------------------------------------------------------------ #
     #  Password reset OTP                                                  #

@@ -70,6 +70,93 @@ CREATE TABLE IF NOT EXISTS password_resets (
     otp_hash   TEXT        NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS code VARCHAR(20);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_code ON courses(code);
+
+CREATE TABLE IF NOT EXISTS materials (
+    id            VARCHAR(50)  PRIMARY KEY,
+    course_id     VARCHAR(50)  NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    uploader_id   VARCHAR(50)  NOT NULL REFERENCES users(id),
+    original_name VARCHAR(255) NOT NULL,
+    stored_name   VARCHAR(255) NOT NULL UNIQUE,
+    size_bytes    BIGINT       NOT NULL,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS assignments (
+    id          VARCHAR(50)  PRIMARY KEY,
+    course_id   VARCHAR(50)  NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    title       VARCHAR(255) NOT NULL,
+    description TEXT         NOT NULL DEFAULT '',
+    due_at      TIMESTAMPTZ  NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS submissions (
+    id             VARCHAR(50)  PRIMARY KEY,
+    assignment_id  VARCHAR(50)  NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    student_id     VARCHAR(50)  NOT NULL REFERENCES users(id),
+    original_name  VARCHAR(255) NOT NULL,
+    stored_name    VARCHAR(255) NOT NULL UNIQUE,
+    submitted_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    score          NUMERIC(4,1),
+    feedback       TEXT,
+    graded_at      TIMESTAMPTZ,
+    UNIQUE (assignment_id, student_id)
+);
+
+CREATE TABLE IF NOT EXISTS quizzes (
+    id           VARCHAR(50)  PRIMARY KEY,
+    course_id    VARCHAR(50)  NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    title        VARCHAR(255) NOT NULL,
+    time_minutes INT          NOT NULL DEFAULT 30,
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+    id         VARCHAR(50)  PRIMARY KEY,
+    quiz_id    VARCHAR(50)  NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+    position   INT          NOT NULL DEFAULT 1,
+    text       TEXT         NOT NULL,
+    options    TEXT         NOT NULL,
+    answer_key VARCHAR(10)  NOT NULL,
+    points     INT          NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS announcements (
+    id         VARCHAR(50)  PRIMARY KEY,
+    course_id  VARCHAR(50)  NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    title      VARCHAR(255) NOT NULL,
+    body       TEXT         NOT NULL,
+    created_by VARCHAR(50)  NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS topics (
+    id         VARCHAR(50)  PRIMARY KEY,
+    course_id  VARCHAR(50)  NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    author_id  VARCHAR(50)  NOT NULL REFERENCES users(id),
+    title      VARCHAR(255) NOT NULL,
+    body       TEXT         NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS comments (
+    id         VARCHAR(50)  PRIMARY KEY,
+    topic_id   VARCHAR(50)  NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    author_id  VARCHAR(50)  NOT NULL REFERENCES users(id),
+    body       TEXT         NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
 """
 
 

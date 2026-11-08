@@ -216,3 +216,58 @@ def grade_attempt(actor, course_id, quiz_id, student_id, score, *, store=None):
     if updated is None:
         raise NotFound()
     return updated
+
+
+# ------------------------------------------------------------------ #
+#  Profile and members                                                 #
+# ------------------------------------------------------------------ #
+
+
+def update_profile(actor, payload, *, store=None):
+    current = _get_store(store)
+    if not isinstance(payload, dict):
+        raise ValidationError()
+    full_name = payload.get("fullName", "")
+    bio = payload.get("bio", "")
+    phone = payload.get("phone", "")
+    for value in (full_name, bio, phone):
+        if not isinstance(value, str):
+            raise ValidationError()
+    if len(full_name) > 100 or len(bio) > 500 or len(phone) > 30:
+        raise ValidationError()
+    cleaned = (full_name.strip(), bio.strip(), phone.strip())
+    if not current.update_user_profile(actor["id"], *cleaned):
+        raise NotFound()
+    return {
+        "id": actor["id"],
+        "email": actor["email"],
+        "role": actor["role"],
+        "fullName": cleaned[0],
+        "bio": cleaned[1],
+        "phone": cleaned[2],
+    }
+
+
+def set_avatar(actor, stored_name, *, store=None):
+    current = _get_store(store)
+    if not current.set_avatar(actor["id"], stored_name):
+        raise NotFound()
+    return {"avatarUrl": f"/files/avatars/{stored_name}"}
+
+
+def list_members(actor, course_id=None, *, store=None):
+    current = _get_store(store)
+    if course_id is None:
+        if actor["role"] != "ADMIN":
+            raise Forbidden()
+        return current.list_users()
+    _course(current, course_id)
+    if actor["role"] == "INSTRUCTOR" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    if actor["role"] == "STUDENT" and current.get_enrollment(
+        course_id, actor["id"]
+    ) is None:
+        raise Forbidden()
+    return current.list_course_members(course_id)

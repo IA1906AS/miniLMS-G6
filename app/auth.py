@@ -1,4 +1,5 @@
 import time
+from uuid import uuid4
 
 import bcrypt
 import jwt
@@ -46,10 +47,32 @@ def create_token(user_id):
     now = _now()
     payload = {
         "sub": user_id,
+        "jti": uuid4().hex,
         "iat": now,
         "exp": now + int(current_app.config["TOKEN_TTL_SECONDS"]),
     }
     return jwt.encode(payload, current_app.config["JWT_SECRET"], algorithm="HS256")
+
+
+# ponytail: in-memory per-process revocation, same scope as the login throttle
+def _revoked():
+    return current_app.extensions.setdefault("revoked_tokens", {})
+
+
+def revoke_token(payload):
+    jti = payload.get("jti")
+    if not jti:
+        return
+    registry = _revoked()
+    registry[jti] = payload.get("exp", 0)
+    now = _now()
+    for expired in [k for k, v in registry.items() if v < now]:
+        del registry[expired]
+
+
+def is_revoked(payload):
+    jti = payload.get("jti")
+    return bool(jti) and jti in _revoked()
 
 
 def verify_token(token):
@@ -69,4 +92,16 @@ def me():
     actor = getattr(g, "actor", None)
     if actor is None:
         raise Unauthenticated()
-    return {"id": actor["id"], "email": actor["email"], "role": actor["role"]}, 200
+    return {
+        "id": actor["id"],
+        "email": actor["email"],
+        "role": actor["role"],
+        "fullName": actor.get("full_name", ""),
+        "bio": actor.get("bio", ""),
+        "phone": actor.get("phone", ""),
+        "avatarUrl": (
+            f"/files/avatars/{actor['avatar_path']}"
+            if actor.get("avatar_path")
+            else None
+        ),
+    }, 200

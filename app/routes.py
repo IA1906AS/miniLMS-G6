@@ -2,13 +2,22 @@ import csv
 import io
 import re
 import secrets
+from pathlib import Path
+from uuid import uuid4
 
 import bcrypt
-from flask import Response, current_app, g, jsonify, request
+from flask import (
+    Response,
+    current_app,
+    g,
+    jsonify,
+    request,
+    send_from_directory,
+)
 from werkzeug.utils import secure_filename
 
 from audit import log_event
-from app import services
+from app import files, services
 from app.auth import (
     _DUMMY_HASH,
     _failures,
@@ -16,8 +25,15 @@ from app.auth import (
     _record_failure,
     create_token,
     me,
+    revoke_token,
 )
-from app.errors import AccountLocked, InvalidCredentials, ValidationError
+from app.errors import (
+    AccountLocked,
+    EmailExists,
+    InvalidCredentials,
+    InvalidCurrentPassword,
+    ValidationError,
+)
 from app.guards import ExportBusy, require_role
 
 
@@ -51,6 +67,8 @@ def register_routes(app):
 
         store = current_app.extensions["store"]
         user = store.get_user_by_email(email)
+        if user is not None and user.get("locked"):
+            raise AccountLocked()
         pw_hash = store.get_password_hash_by_email(email) or _DUMMY_HASH
         ok = isinstance(password, str) and bcrypt.checkpw(password.encode(), pw_hash)
         if user is None or not ok:
@@ -58,6 +76,7 @@ def register_routes(app):
             raise InvalidCredentials()
 
         _failures().pop(email, None)
+        log_event(user["id"], "LOGIN", user["email"], "SUCCESS")
         return {
             "accessToken": create_token(user["id"]),
             "expiresIn": int(current_app.config["TOKEN_TTL_SECONDS"]),
@@ -78,8 +97,9 @@ def register_routes(app):
 
         store = current_app.extensions["store"]
         if store.get_user_by_email(email) is not None:
-            return {"error": "EMAIL_ALREADY_EXISTS"}, 409
-        return {"user": store.create_user(email, password)}, 201
+            raise EmailExists()
+        user = store.create_user(uuid4().hex, email, password)
+        return {"user": user}, 201
 
     @app.post("/auth/forgot-password")
     def forgot_password():
@@ -138,6 +158,69 @@ def register_routes(app):
     @app.get("/me")
     def current_user():
         return me()
+
+    @app.put("/me")
+    def update_me():
+        result = services.update_profile(g.actor, request.get_json(silent=True))
+        return jsonify(result), 200
+
+    @app.post("/me/avatar")
+    def upload_avatar():
+        storage = request.files.get("avatar")
+        if storage is None:
+            raise ValidationError()
+        upload_dir = current_app.config["UPLOAD_DIR"]
+        old = g.actor.get("avatar_path")
+        stored, _original, _size = files.save_upload(
+            upload_dir,
+            storage,
+            "avatars",
+            allowed_extensions=files.ALLOWED_IMAGE_EXTENSIONS,
+            max_bytes=files.MAX_AVATAR_BYTES,
+        )
+        result = services.set_avatar(g.actor, stored)
+        if old:
+            files.delete_upload(upload_dir, "avatars", old)
+        return jsonify(result), 200
+
+    @app.get("/files/avatars/<name>")
+    def avatar_file(name):
+        return send_from_directory(
+            Path(current_app.config["UPLOAD_DIR"]) / "avatars", name
+        )
+
+    @app.post("/auth/change-password")
+    def change_password():
+        data = request.get_json(silent=True)
+        current_pw = data.get("currentPassword", "") if isinstance(data, dict) else ""
+        new_pw = data.get("newPassword", "") if isinstance(data, dict) else ""
+        if (
+            not isinstance(current_pw, str)
+            or not isinstance(new_pw, str)
+            or len(new_pw) < 8
+        ):
+            raise ValidationError()
+
+        store = current_app.extensions["store"]
+        pw_hash = store.get_password_hash_by_email(g.actor["email"])
+        if pw_hash is None or not bcrypt.checkpw(current_pw.encode(), pw_hash):
+            raise InvalidCurrentPassword()
+
+        store.update_password(g.actor["id"], new_pw)
+        revoke_token(g.token_payload)
+        log_event(g.actor["id"], "CHANGE_PASSWORD", g.actor["id"], "SUCCESS")
+        return {"message": "Password updated"}, 200
+
+    @app.post("/auth/logout")
+    def logout():
+        revoke_token(getattr(g, "token_payload", {}))
+        return {"message": "Logged out"}, 200
+
+    @app.get("/members")
+    def members():
+        course_id = request.args.get("courseId")
+        rows = services.list_members(g.actor, course_id)
+        return jsonify(rows), 200
 
     @app.get("/courses/<course_id>/grades")
     @require_role("ADMIN", "INSTRUCTOR", "STUDENT")

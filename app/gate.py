@@ -3,7 +3,8 @@ from typing import Any
 import jwt
 from flask import Flask, current_app, g, request
 
-from app.errors import Unauthenticated
+from app.auth import is_revoked
+from app.errors import Forbidden, Unauthenticated
 
 # Browser pages and their exact assets are public; data APIs remain protected.
 PUBLIC_PAGES = {
@@ -43,6 +44,14 @@ def gate_before_request() -> Any | None:
         g.actor = None
         return None
 
+    # Avatars are served to <img> tags that cannot send Authorization headers;
+    # stored names are unguessable (uuid prefix).
+    if request.method in {"GET", "HEAD"} and request.path.startswith(
+        "/files/avatars/"
+    ):
+        g.actor = None
+        return None
+
     auth_header = request.headers.get("Authorization")
     if not auth_header:
         raise Unauthenticated()
@@ -64,12 +73,18 @@ def gate_before_request() -> Any | None:
     if not isinstance(payload, dict) or not payload.get("sub"):
         raise Unauthenticated()
 
+    if is_revoked(payload):
+        raise Unauthenticated()
+
     store = current_app.extensions.get("store")
     user = store.get_user_by_id(payload["sub"]) if store else None
     if not user:
         raise Unauthenticated()
+    if user.get("locked"):
+        raise Forbidden()
 
     g.actor = user
+    g.token_payload = payload
     return None
 
 

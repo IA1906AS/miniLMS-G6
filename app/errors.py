@@ -60,6 +60,21 @@ class DeadlinePassed(ApiError):
         self.message = message
 
 
+class InvalidCurrentPassword(ApiError):
+    status = 400
+    code = "INVALID_CURRENT_PASSWORD"
+
+
+class EmailExists(ApiError):
+    status = 409
+    code = "EMAIL_ALREADY_EXISTS"
+
+
+class CodeExists(ApiError):
+    status = 409
+    code = "COURSE_CODE_ALREADY_EXISTS"
+
+
 def register_error_handlers(app):
     @app.errorhandler(ApiError)
     def _handle_api_error(e):
