@@ -42,7 +42,9 @@ def test_autograde_scores_on_submit(client):
     )
     assert saved.status_code == 200
     submitted = client.post(
-        "/courses/c1/quizzes/q1/attempts/submit", headers=auth(chi), json={}
+        "/courses/c1/quizzes/q1/attempts/submit",
+        headers=auth(chi),
+        json={"answers": "A,B,C"},
     )
     assert submitted.status_code == 200
     assert submitted.json["state"] == "SUBMITTED"
@@ -59,6 +61,7 @@ def test_autograde_partial_score(client):
         headers=auth(dung),
         json={"answers": "B,C"},
     )
+    assert submitted.status_code == 200
     assert submitted.status_code == 200
     assert submitted.json["score"] == 5.0
     # Instructor can still confirm/override into GRADED.

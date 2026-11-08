@@ -46,6 +46,11 @@ def test_store_grades_and_permissions(store):
         "id": "u6",
         "email": "em.sv@lms.test",
         "role": "STUDENT",
+        "full_name": "Hoàng Hải Em",
+        "bio": "",
+        "phone": "",
+        "avatar_path": None,
+        "locked": False,
     }
     assert "password" not in store.get_user_by_id("u6")
     assert store.get_user_by_email("khongco@lms.test") is None

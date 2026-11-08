@@ -112,7 +112,7 @@ class PgStore:
                     VALUES (%s, %s, %s, %s)
                     RETURNING id, email, role
                     """,
-                    (uid, email, pw_hash, role),
+                    (uid, email, pw_hash.decode("utf-8"), role),
                 )
                 row = cur.fetchone()
         return dict(row)

@@ -592,6 +592,12 @@ def register_routes(app):
         rows = services.list_topics(g.actor, course_id, store=store)
         return jsonify(rows), 200
 
+    @app.get("/topics/<topic_id>")
+    def get_topic(topic_id):
+        store = current_app.extensions["store"]
+        topic = services.get_topic(g.actor, topic_id, store=store)
+        return jsonify(topic), 200
+
     @app.put("/topics/<topic_id>")
     def update_topic(topic_id):
         store = current_app.extensions["store"]

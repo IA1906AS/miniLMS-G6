@@ -671,6 +671,11 @@ def list_topics(actor, course_id, *, store=None):
     return current.list_topics(course_id)
 
 
+def get_topic(actor, topic_id, *, store=None):
+    current = _get_store(store)
+    return _visible_topic(current, actor, topic_id)
+
+
 def _own_topic(store, actor, topic_id):
     topic = store.get_topic(topic_id)
     if topic is None:
