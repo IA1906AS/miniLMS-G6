@@ -1,4 +1,6 @@
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from app import attempt_sm
 from app.errors import Forbidden, NotFound, ValidationError
@@ -755,3 +757,88 @@ def list_announcements(actor, course_id, *, store=None):
     _course(current, course_id)
     _course_visible(current, actor, course_id)
     return current.list_announcements(course_id)
+
+
+# ------------------------------------------------------------------ #
+#  Admin                                                               #
+# ------------------------------------------------------------------ #
+
+VALID_ROLES = ("ADMIN", "INSTRUCTOR", "STUDENT")
+
+
+def _require_admin(actor):
+    if actor["role"] != "ADMIN":
+        raise Forbidden()
+
+
+def admin_list_users(actor, q=None, *, store=None):
+    current = _get_store(store)
+    _require_admin(actor)
+    return current.list_users(q)
+
+
+def admin_update_user(actor, user_id, payload, *, store=None):
+    current = _get_store(store)
+    _require_admin(actor)
+    if not isinstance(payload, dict):
+        raise ValidationError()
+    role = payload.get("role")
+    locked = payload.get("locked")
+    if role is None and locked is None:
+        raise ValidationError()
+    target = current.get_user_by_id(user_id)
+    if target is None:
+        raise NotFound()
+    if user_id == actor["id"]:
+        raise Forbidden()  # cannot lock or demote your own admin account
+    if role is not None:
+        if role not in VALID_ROLES:
+            raise ValidationError()
+        current.set_user_role(user_id, role)
+    if locked is not None:
+        if not isinstance(locked, bool):
+            raise ValidationError()
+        current.set_user_lock(user_id, locked)
+    updated = current.get_user_by_id(user_id)
+    return {
+        "id": updated["id"],
+        "email": updated["email"],
+        "role": updated["role"],
+        "fullName": updated.get("full_name", ""),
+        "locked": bool(updated.get("locked")),
+    }
+
+
+def admin_delete_course(actor, course_id, *, store=None):
+    current = _get_store(store)
+    _require_admin(actor)
+    _course(current, course_id)
+    current.delete_course(course_id)
+    return {"message": "Deleted"}
+
+
+def admin_read_audit(actor, limit=200, *, audit_path=None):
+    _require_admin(actor)
+    if not isinstance(limit, int) or not 1 <= limit <= 1000:
+        limit = 200
+    path = audit_path
+    if path is None:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            path = current_app.config.get("AUDIT_LOG_PATH", "audit.log")
+        else:
+            path = "audit.log"
+    entries = []
+    p = Path(path)
+    if p.exists():
+        with open(p, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except ValueError:
+                    continue
+    return list(reversed(entries[-limit:]))

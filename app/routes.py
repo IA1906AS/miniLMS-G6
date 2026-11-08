@@ -658,3 +658,50 @@ def register_routes(app):
         store = current_app.extensions["store"]
         rows = services.list_announcements(g.actor, course_id, store=store)
         return jsonify(rows), 200
+
+    # ── Admin ───────────────────────────────────────────────────────────
+
+    @app.get("/admin/users")
+    @require_role("ADMIN")
+    def admin_users():
+        store = current_app.extensions["store"]
+        rows = services.admin_list_users(
+            g.actor, q=request.args.get("q"), store=store
+        )
+        return jsonify(rows), 200
+
+    @app.patch("/admin/users/<user_id>")
+    @require_role("ADMIN")
+    def admin_update_user(user_id):
+        store = current_app.extensions["store"]
+        user = services.admin_update_user(
+            g.actor, user_id, request.get_json(silent=True), store=store
+        )
+        log_event(
+            g.actor["id"],
+            "ADMIN_UPDATE_USER",
+            user_id,
+            "SUCCESS",
+            role=user.get("role"),
+            locked=user.get("locked"),
+        )
+        return jsonify(user), 200
+
+    @app.delete("/admin/courses/<course_id>")
+    @require_role("ADMIN")
+    def admin_delete_course(course_id):
+        store = current_app.extensions["store"]
+        result = services.admin_delete_course(g.actor, course_id, store=store)
+        log_event(g.actor["id"], "ADMIN_DELETE_COURSE", course_id, "SUCCESS")
+        return jsonify(result), 200
+
+    @app.get("/admin/audit")
+    @require_role("ADMIN")
+    def admin_audit():
+        raw_limit = request.args.get("limit", "200")
+        try:
+            limit = int(raw_limit)
+        except ValueError:
+            limit = 200
+        rows = services.admin_read_audit(g.actor, limit)
+        return jsonify(rows), 200
