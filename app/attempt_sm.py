@@ -19,11 +19,16 @@ IN_PROGRESS = "IN_PROGRESS"
 SUBMITTED = "SUBMITTED"
 GRADED = "GRADED"
 
+# Hành động hợp lệ trên một lượt làm bài
+SAVE = "SAVE"
+SUBMIT = "SUBMIT"
+GRADE = "GRADE"
+
 # (trạng thái hiện tại, hành động) -> trạng thái sau
 TRANSITIONS = {
-    (IN_PROGRESS, "SAVE"): IN_PROGRESS,
-    (IN_PROGRESS, "SUBMIT"): SUBMITTED,
-    (SUBMITTED, "GRADE"): GRADED,
+    (IN_PROGRESS, SAVE): IN_PROGRESS,
+    (IN_PROGRESS, SUBMIT): SUBMITTED,
+    (SUBMITTED, GRADE): GRADED,
 }
 
 
