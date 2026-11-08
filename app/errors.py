@@ -113,7 +113,4 @@ def register_error_handlers(app):
 
     @app.errorhandler(Exception)
     def _handle_unexpected(e):
-        # DEBUG(temp): print traceback, drop once CI failures are diagnosed
-        import traceback
-        traceback.print_exc()
         return {"error": "INTERNAL_ERROR"}, 500
