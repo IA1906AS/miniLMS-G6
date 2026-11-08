@@ -34,3 +34,41 @@
 .report-entry{color:var(--green);font-weight:600;min-height:44px;display:inline-flex;align-items:center}
 .report-entry:hover{text-decoration:underline}
 @media(max-width:760px){.sidebar nav{margin-top:0}.section-heading .report-entry{font-size:11px}}
+/* ── LMS feature UI ─────────────────────────────────────────────── */
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px;margin-bottom:22px}
+.panel h2{margin:0 0 14px;font-size:19px}
+.panel-toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.panel-toolbar input[type=search]{flex:1;min-width:220px;min-height:44px;padding:0 14px;border:1px solid #9bad9e;border-radius:8px;font:inherit}
+.inline-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.inline-form input:not([type=file]){min-height:44px;padding:0 12px;border:1px solid #9bad9e;border-radius:8px;font:inherit}
+.inline-form input[type=file]{min-height:44px;max-width:340px;padding:9px 12px;border:1px solid #9bad9e;border-radius:8px;font:inherit;background:#fff}
+.item-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.item-list li{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:13px 16px;border:1px solid var(--line);border-radius:10px;background:#f7faf6}
+.item-list .meta{display:flex;flex-direction:column;gap:3px;min-width:0}
+.item-list .meta b{font-size:14px}
+.item-list .meta small{color:#53655b}
+.item-actions{display:flex;gap:8px;flex-wrap:wrap}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.tab-btn{border:0;background:none;padding:12px 16px;font:inherit;font-weight:600;color:#53655b;cursor:pointer;border-bottom:3px solid transparent}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green)}
+.tab-panel{min-height:120px}
+.stack-form{display:grid;gap:12px;max-width:480px;margin:26px 0;padding-top:20px;border-top:1px solid var(--line)}
+.stack-form h3{margin:0;font-size:15px}
+.stack-form label{display:grid;gap:6px;font-weight:600;font-size:13px}
+.stack-form input,.stack-form textarea{min-height:44px;padding:10px 12px;border:1px solid #9bad9e;border-radius:8px;font:inherit;font-weight:400}
+.avatar-form{display:grid;gap:10px;margin-top:18px;z-index:1}
+.avatar-form input[type=file]{font-size:12px}
+.avatar-photo{width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid #fff;margin-bottom:14px}
+.quiz-question{border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px;background:#fff}
+.quiz-question h4{margin:0 0 10px;font-size:14px}
+.quiz-question label{display:block;margin:6px 0;font-size:14px}
+.grade-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.grade-row input{min-height:38px;width:90px;padding:0 10px;border:1px solid #9bad9e;border-radius:8px;font:inherit}
+.report-table-wrap table{width:100%;border-collapse:collapse;font-size:13px}
+.report-table-wrap th{text-align:left;padding:9px 10px;border-bottom:2px solid var(--line);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#53655b}
+.report-table-wrap td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+.report-table-wrap select,.report-table-wrap input{min-height:36px;padding:0 8px;border:1px solid #9bad9e;border-radius:7px;font:inherit}
+.sub-list{margin:10px 0 18px;padding-left:16px;display:grid;gap:8px}
+.sub-list li{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.link-btn{border:0;background:none;color:var(--green);font:inherit;font-weight:600;cursor:pointer;padding:6px 2px;text-decoration:underline}
+@media(max-width:760px){.panel{padding:16px}.tab-btn{padding:10px 10px;font-size:12px}}

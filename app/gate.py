@@ -10,8 +10,11 @@ from app.errors import Forbidden, Unauthenticated
 PUBLIC_PAGES = {
     "/",
     "/home",
+    "/courses",
+    "/course",
     "/account",
     "/reports",
+    "/admin",
     "/login",
     "/register",
     "/static/app.css",

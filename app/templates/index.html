@@ -15,8 +15,10 @@
     <a class="brand" href="/home"><span class="brand-icon">m<span>↗</span></span>miniLMS<span class="brand-dot">.</span></a>
     <nav aria-label="Điều hướng chính">
       <a href="/home" data-page="home"><span aria-hidden="true">▦</span> Trang chủ <span class="nav-arrow">↗</span></a>
+      <a href="/courses" data-page="courses"><span aria-hidden="true">▥</span> Khóa học <span class="nav-arrow">↗</span></a>
       <a href="/account" data-page="account"><span aria-hidden="true">◎</span> Tài khoản <span class="nav-arrow">↗</span></a>
       <a href="/reports" data-page="reports"><span aria-hidden="true">▤</span> Báo cáo điểm <span class="nav-arrow">↗</span></a>
+      <a href="/admin" data-page="admin" id="nav-admin" hidden><span aria-hidden="true">✳</span> Quản trị <span class="nav-arrow">↗</span></a>
     </nav>
   </aside>
   <div class="workspace">
@@ -26,6 +28,38 @@
         <div class="page-heading"><h1>Học tập</h1></div>
         <div class="stats"><article><span class="stat-icon">▤</span><div><p>Khóa học</p><strong id="course-count">—</strong></div></article><article><span class="stat-icon peach">↗</span><div><p>Điểm TB</p><strong id="average">—</strong></div></article><article><span class="stat-icon lavender">◎</span><div><p>Vai trò</p><strong class="role-stat" id="role-stat">—</strong></div></article></div>
         <section id="courses"><div class="section-heading"><h2>Khóa học</h2><a href="/reports" class="report-entry">Xem báo cáo điểm ↗</a></div><p id="home-message" class="message" role="status"></p><div id="course-grid" class="course-grid"></div></section>
+      </section>
+      <section id="courses-page" hidden>
+        <div class="page-heading"><h1>Khóa học</h1></div>
+        <div class="panel">
+          <div class="panel-toolbar">
+            <input id="course-search" type="search" placeholder="Tìm theo tên khóa học…" aria-label="Tìm khóa học">
+            <form id="enroll-form" class="inline-form" hidden><input id="enroll-code" placeholder="Mã ghi danh (VD: LMS101)" aria-label="Mã ghi danh"><button class="button green" type="submit">Ghi danh</button></form>
+            <form id="create-course-form" class="inline-form" hidden><input id="new-course-title" placeholder="Tên khóa học" required><input id="new-course-code" placeholder="Mã khóa (VD: DB301)" required><button class="button green" type="submit">Tạo khóa học</button></form>
+          </div>
+          <p id="courses-message" class="message" role="status"></p>
+          <ul id="course-list" class="item-list"></ul>
+        </div>
+      </section>
+      <section id="course-page" hidden>
+        <div class="report-heading">
+          <div><h1 id="course-title">Khóa học</h1><p id="course-sub">Chi tiết khóa học</p></div>
+          <a href="/courses" class="report-back">Danh sách khóa học ↗</a>
+        </div>
+        <nav class="tabs" id="course-tabs" aria-label="Nội dung khóa học">
+          <button type="button" class="tab-btn active" data-tab="materials">Tài liệu</button>
+          <button type="button" class="tab-btn" data-tab="assignments">Bài tập</button>
+          <button type="button" class="tab-btn" data-tab="quizzes">Bài kiểm tra</button>
+          <button type="button" class="tab-btn" data-tab="forum">Diễn đàn</button>
+          <button type="button" class="tab-btn" data-tab="announcements">Thông báo</button>
+          <button type="button" class="tab-btn" data-tab="members">Thành viên</button>
+        </nav>
+        <div id="tab-materials" class="tab-panel"><p class="message" id="materials-message" role="status"></p><form id="material-form" class="inline-form" hidden><input type="file" id="material-file" required><button class="button green" type="submit">Tải lên</button></form><ul id="material-list" class="item-list"></ul></div>
+        <div id="tab-assignments" class="tab-panel" hidden><p class="message" id="assignments-message" role="status"></p><form id="assignment-form" class="inline-form" hidden><input id="assignment-title" placeholder="Tên bài tập" required><input id="assignment-due" type="datetime-local" required><button class="button green" type="submit">Tạo bài tập</button></form><div id="assignment-list"></div></div>
+        <div id="tab-quizzes" class="tab-panel" hidden><p class="message" id="quizzes-message" role="status"></p><form id="quiz-form" class="inline-form" hidden><input id="quiz-title" placeholder="Tên bài kiểm tra" required><input id="quiz-minutes" type="number" min="1" value="30" aria-label="Số phút"><button class="button green" type="submit">Tạo (thêm câu hỏi qua API)</button></form><div id="quiz-list"></div></div>
+        <div id="tab-forum" class="tab-panel" hidden><p class="message" id="forum-message" role="status"></p><form id="topic-form" class="inline-form"><input id="topic-title" placeholder="Tiêu đề chủ đề" required><input id="topic-body" placeholder="Nội dung" required><button class="button green" type="submit">Đăng chủ đề</button></form><div id="forum-area"></div></div>
+        <div id="tab-announcements" class="tab-panel" hidden><p class="message" id="announcements-message" role="status"></p><form id="announcement-form" class="inline-form" hidden><input id="announcement-title" placeholder="Tiêu đề thông báo" required><input id="announcement-body" placeholder="Nội dung" required><button class="button green" type="submit">Phát thông báo</button></form><ul id="announcement-list" class="item-list"></ul></div>
+        <div id="tab-members" class="tab-panel" hidden><p class="message" id="members-message" role="status"></p><form id="add-student-form" class="inline-form" hidden><input id="add-student-id" placeholder="Mã sinh viên" required><button class="button green" type="submit">Thêm vào lớp</button></form><ul id="member-list" class="item-list"></ul></div>
       </section>
       <section id="reports-page" hidden>
         <div class="report-heading">
@@ -45,7 +79,53 @@
       </section>
       <section id="account-page" hidden>
         <div class="page-heading"><h1>Tài khoản</h1></div>
-        <div class="account-layout"><aside class="profile-card"><div class="avatar large" id="profile-avatar">M</div><span class="pill" id="profile-role">Vai trò</span><h2 id="profile-title">Tài khoản</h2><div class="profile-decoration" aria-hidden="true">✳</div></aside><div class="account-panel"><div id="profile-panel"><dl><div><dt>Email</dt><dd id="profile-email"></dd></div><div><dt>Mã tài khoản</dt><dd id="profile-id"></dd></div><div><dt>Vai trò</dt><dd id="profile-role-detail"></dd></div></dl><button id="logout" class="button outline">Đăng xuất <span>↗</span></button></div></div></div>
+        <div class="account-layout">
+          <aside class="profile-card">
+            <img id="profile-photo" class="avatar-photo" alt="" hidden>
+            <div class="avatar large" id="profile-avatar">M</div>
+            <span class="pill" id="profile-role">Vai trò</span>
+            <h2 id="profile-title">Tài khoản</h2>
+            <form id="avatar-form" class="avatar-form"><input type="file" id="avatar-file" accept=".png,.jpg,.jpeg,.gif" aria-label="Chọn ảnh đại diện"><button class="button outline" type="submit">Đổi ảnh đại diện</button></form>
+            <div class="profile-decoration" aria-hidden="true">✳</div>
+          </aside>
+          <div class="account-panel">
+            <div id="profile-panel">
+              <dl><div><dt>Email</dt><dd id="profile-email"></dd></div><div><dt>Mã tài khoản</dt><dd id="profile-id"></dd></div><div><dt>Vai trò</dt><dd id="profile-role-detail"></dd></div></dl>
+              <form id="profile-form" class="stack-form">
+                <h3>Hồ sơ cá nhân</h3>
+                <label>Họ và tên<input id="profile-fullname" maxlength="100"></label>
+                <label>Điện thoại<input id="profile-phone" maxlength="30"></label>
+                <label>Tiểu sử<textarea id="profile-bio" rows="3" maxlength="500"></textarea></label>
+                <button class="button green" type="submit">Lưu hồ sơ</button>
+              </form>
+              <form id="password-form" class="stack-form">
+                <h3>Đổi mật khẩu</h3>
+                <label>Mật khẩu hiện tại<input id="pw-current" type="password" autocomplete="current-password" required></label>
+                <label>Mật khẩu mới (tối thiểu 8 ký tự)<input id="pw-new" type="password" autocomplete="new-password" minlength="8" required></label>
+                <button class="button outline" type="submit">Đổi mật khẩu</button>
+              </form>
+              <p class="message" id="account-message" role="status"></p>
+              <button id="logout" class="button outline">Đăng xuất <span>↗</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="admin-page" hidden>
+        <div class="page-heading"><h1>Quản trị hệ thống</h1></div>
+        <div class="panel">
+          <h2>Người dùng</h2>
+          <div class="panel-toolbar"><input id="admin-user-search" type="search" placeholder="Tìm theo email / họ tên…" aria-label="Tìm người dùng"></div>
+          <p class="message" id="admin-message" role="status"></p>
+          <div class="report-table-wrap"><table id="admin-users"><thead><tr><th>Email</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel">
+          <h2>Khóa học</h2>
+          <div class="report-table-wrap"><table id="admin-courses"><thead><tr><th>Mã</th><th>Tên</th><th></th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel">
+          <h2>Nhật ký hoạt động</h2>
+          <div class="report-table-wrap"><table id="admin-audit"><thead><tr><th>Thời điểm</th><th>Hành động</th><th>Tài khoản</th><th>Tài nguyên</th><th>Kết quả</th></tr></thead><tbody></tbody></table></div>
+        </div>
       </section>
     </main>
     <footer><span>© miniLMS · Nhóm 6</span></footer>
