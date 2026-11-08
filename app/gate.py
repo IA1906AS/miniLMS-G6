@@ -3,14 +3,18 @@ from typing import Any
 import jwt
 from flask import Flask, current_app, g, request
 
-from app.errors import Unauthenticated
+from app.auth import is_revoked
+from app.errors import Forbidden, Unauthenticated
 
 # Browser pages and their exact assets are public; data APIs remain protected.
 PUBLIC_PAGES = {
     "/",
     "/home",
+    "/courses",
+    "/course",
     "/account",
     "/reports",
+    "/admin",
     "/login",
     "/register",
     "/static/app.css",
@@ -25,6 +29,7 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("POST", "/auth/register"),
     ("POST", "/auth/forgot-password"),
     ("POST", "/auth/reset-password"),
+    ("GET", "/api/openapi.yaml"),
 }
 
 
@@ -39,6 +44,14 @@ def gate_before_request() -> Any | None:
     """Apply default-deny authentication to every non-public request."""
     if (request.method in {"GET", "HEAD"} and request.path in PUBLIC_PAGES) or is_allowlisted(
         request.method, request.path
+    ):
+        g.actor = None
+        return None
+
+    # Avatars are served to <img> tags that cannot send Authorization headers;
+    # stored names are unguessable (uuid prefix).
+    if request.method in {"GET", "HEAD"} and request.path.startswith(
+        "/files/avatars/"
     ):
         g.actor = None
         return None
@@ -64,12 +77,18 @@ def gate_before_request() -> Any | None:
     if not isinstance(payload, dict) or not payload.get("sub"):
         raise Unauthenticated()
 
+    if is_revoked(payload):
+        raise Unauthenticated()
+
     store = current_app.extensions.get("store")
     user = store.get_user_by_id(payload["sub"]) if store else None
     if not user:
         raise Unauthenticated()
+    if user.get("locked"):
+        raise Forbidden()
 
     g.actor = user
+    g.token_payload = payload
     return None
 
 

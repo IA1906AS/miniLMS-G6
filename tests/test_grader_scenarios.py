@@ -176,13 +176,13 @@ def test_a19_audit_log(app, client):
     assert client.put("/courses/c1/grades/u4", headers=auth(an), json={"score": 9, "version": v}).status_code == 200
 
     lines = Path(app.config["AUDIT_LOG_PATH"]).read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 2
-    e403, e_update = (json.loads(line) for line in lines)
-    assert e403["result"] == "FORBIDDEN"
+    events = [json.loads(line) for line in lines]
+    e403 = next(e for e in events if e.get("result") == "FORBIDDEN")
+    e_update = next(e for e in events if e.get("action") == "UPDATE_GRADE")
+    assert any(e.get("action") == "LOGIN" for e in events)
     assert e403["actorId"] == "u3"
     assert e403["action"] == "PUT"
     assert e403["resource"] == "/courses/c1/grades/u4"
-    assert e_update["action"] == "UPDATE_GRADE"
     assert e_update["result"] == "SUCCESS"
     assert e_update["oldScore"] == 7.5
     assert e_update["newScore"] == 9

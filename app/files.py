@@ -1,0 +1,46 @@
+"""Upload helpers: validate and persist files on local disk."""
+
+from pathlib import Path
+from uuid import uuid4
+
+from werkzeug.utils import secure_filename
+
+from .errors import ValidationError
+
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "pdf", "doc", "docx", "zip", "txt"}
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+
+def save_upload(
+    upload_dir,
+    storage,
+    subdir,
+    *,
+    allowed_extensions=None,
+    max_bytes=MAX_UPLOAD_BYTES,
+):
+    """Validate a FileStorage and persist it; returns (stored_name, original_name, size)."""
+    original = secure_filename(storage.filename or "")
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    allowed = allowed_extensions if allowed_extensions is not None else ALLOWED_EXTENSIONS
+    if not original or ext not in allowed:
+        raise ValidationError()
+    data = storage.read()
+    if not data or len(data) > max_bytes:
+        raise ValidationError()
+    stored = f"{uuid4().hex}_{original}"
+    target = Path(upload_dir) / subdir
+    target.mkdir(parents=True, exist_ok=True)
+    (target / stored).write_bytes(data)
+    return stored, original, len(data)
+
+
+def upload_path(upload_dir, subdir, stored_name):
+    return Path(upload_dir) / subdir / stored_name
+
+
+def delete_upload(upload_dir, subdir, stored_name):
+    if stored_name:
+        upload_path(upload_dir, subdir, stored_name).unlink(missing_ok=True)

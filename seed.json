@@ -1,15 +1,15 @@
 {
   "users": [
-    { "id": "u1", "email": "admin@lms.test", "password": "Lms@2026", "role": "ADMIN" },
-    { "id": "u2", "email": "an.gv@lms.test", "password": "Lms@2026", "role": "INSTRUCTOR" },
-    { "id": "u3", "email": "binh.gv@lms.test", "password": "Lms@2026", "role": "INSTRUCTOR" },
-    { "id": "u4", "email": "chi.sv@lms.test", "password": "Lms@2026", "role": "STUDENT" },
-    { "id": "u5", "email": "dung.sv@lms.test", "password": "Lms@2026", "role": "STUDENT" },
-    { "id": "u6", "email": "em.sv@lms.test", "password": "Lms@2026", "role": "STUDENT" }
+    { "id": "u1", "email": "admin@lms.test", "password": "Lms@2026", "role": "ADMIN", "fullName": "Quản trị viên Hệ thống" },
+    { "id": "u2", "email": "an.gv@lms.test", "password": "Lms@2026", "role": "INSTRUCTOR", "fullName": "Nguyễn Văn An" },
+    { "id": "u3", "email": "binh.gv@lms.test", "password": "Lms@2026", "role": "INSTRUCTOR", "fullName": "Trần Thị Bình" },
+    { "id": "u4", "email": "chi.sv@lms.test", "password": "Lms@2026", "role": "STUDENT", "fullName": "Lê Thu Chi" },
+    { "id": "u5", "email": "dung.sv@lms.test", "password": "Lms@2026", "role": "STUDENT", "fullName": "Phạm Văn Dũng" },
+    { "id": "u6", "email": "em.sv@lms.test", "password": "Lms@2026", "role": "STUDENT", "fullName": "Hoàng Hải Em" }
   ],
   "courses": [
-    { "id": "c1", "title": "Lập trình Web", "instructorId": "u2" },
-    { "id": "c2", "title": "Cơ sở dữ liệu", "instructorId": "u3" }
+    { "id": "c1", "title": "Lập trình Web", "instructorId": "u2", "code": "LMS101" },
+    { "id": "c2", "title": "Cơ sở dữ liệu", "instructorId": "u3", "code": "DB201" }
   ],
   "enrollments": [
     { "courseId": "c1", "studentId": "u4", "score": 7.5 },
@@ -17,9 +17,32 @@
     { "courseId": "c2", "studentId": "u5", "score": 6.0 },
     { "courseId": "c2", "studentId": "u6", "score": 9.0 }
   ],
+  "quizzes": [
+    { "id": "q1", "courseId": "c1", "title": "Kiến trúc HTTP và Flask", "timeMinutes": 30 },
+    { "id": "q2", "courseId": "c1", "title": "Flask cơ bản", "timeMinutes": 20 },
+    { "id": "q3", "courseId": "c2", "title": "Chuẩn hoá cơ sở dữ liệu", "timeMinutes": 15 }
+  ],
+  "questions": [
+    { "id": "q1e1", "quizId": "q1", "position": 1, "text": "Giao thức nào trình duyệt dùng để yêu cầu trang web?", "options": ["HTTP", "SMTP", "FTP", "SSH"], "answer": "A", "points": 1 },
+    { "id": "q1e2", "quizId": "q1", "position": 2, "text": "Trong Flask, khối nào ánh xạ URL tới hàm Python?", "options": ["Trigger", "Route", "Cursor", "Index"], "answer": "B", "points": 1 },
+    { "id": "q1e3", "quizId": "q1", "position": 3, "text": "Thư viện nào giữ kết nối PostgreSQL cho app này?", "options": ["numpy", "pandas", "psycopg2", "matplotlib"], "answer": "C", "points": 1 },
+    { "id": "q2e1", "quizId": "q2", "position": 1, "text": "Đối tượng nào tạo ứng dụng Flask?", "options": ["Flask", "Bcrypt", "JWT", "Socket"], "answer": "A", "points": 1 },
+    { "id": "q2e2", "quizId": "q2", "position": 2, "text": "Hàm view trả về gì để tạo JSON response?", "options": ["render_template", "redirect", "jsonify", "abort"], "answer": "C", "points": 1 },
+    { "id": "q3e1", "quizId": "q3", "position": 1, "text": "Ràng buộc nào đảm bảo một cột không trùng giá trị?", "options": ["DEFAULT", "CHECK", "FOREIGN KEY", "UNIQUE"], "answer": "D", "points": 1 },
+    { "id": "q3e2", "quizId": "q3", "position": 2, "text": "Dạng chuẩn nào loại bỏ phụ thuộc bắc cầu?", "options": ["1NF", "2NF", "3NF", "BCNF"], "answer": "C", "points": 1 }
+  ],
   "quizAttempts": [
     { "id": "a1", "courseId": "c1", "quizId": "q1", "studentId": "u4", "answers": "B,A,C", "state": "IN_PROGRESS", "deadlineOffsetMinutes": 120 },
     { "id": "a2", "courseId": "c1", "quizId": "q1", "studentId": "u5", "answers": "A,B,C", "state": "SUBMITTED", "deadlineOffsetMinutes": -60 },
-    { "id": "a3", "courseId": "c2", "quizId": "q1", "studentId": "u6", "answers": "C,B,A", "state": "IN_PROGRESS", "deadlineOffsetMinutes": -60 }
+    { "id": "a3", "courseId": "c2", "quizId": "q3", "studentId": "u6", "answers": "C,B,A", "state": "IN_PROGRESS", "deadlineOffsetMinutes": -60 }
+  ],
+  "topics": [
+    { "id": "t1", "courseId": "c1", "authorId": "u4", "title": "Cài Flask trên Windows như thế nào?", "body": "Em chạy pip install flask bị báo lỗi quyền. Ai giúp em với ạ?" }
+  ],
+  "comments": [
+    { "id": "k1", "topicId": "t1", "authorId": "u2", "body": "Em thử lại với lệnh: python -m pip install --user flask nhé." }
+  ],
+  "announcements": [
+    { "id": "n1", "courseId": "c1", "createdBy": "u2", "title": "Nội dung tuần này", "body": "Tuần này chúng ta học về template Jinja2 và biểu thức điều khiển." }
   ]
 }

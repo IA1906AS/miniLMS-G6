@@ -48,6 +48,14 @@ def seed_db():
     try:
         with conn.cursor() as cur:
             # Clear in reverse FK order
+            cur.execute("DELETE FROM comments")
+            cur.execute("DELETE FROM topics")
+            cur.execute("DELETE FROM announcements")
+            cur.execute("DELETE FROM questions")
+            cur.execute("DELETE FROM quizzes")
+            cur.execute("DELETE FROM submissions")
+            cur.execute("DELETE FROM assignments")
+            cur.execute("DELETE FROM materials")
             cur.execute("DELETE FROM password_resets")
             cur.execute("DELETE FROM quiz_attempts")
             cur.execute("DELETE FROM enrollments")
@@ -60,20 +68,60 @@ def seed_db():
                     u["password"].encode(), bcrypt.gensalt(rounds=10)
                 )
                 cur.execute(
-                    "INSERT INTO users (id, email, password_hash, role) "
-                    "VALUES (%s, %s, %s, %s)",
-                    (u["id"], u["email"], pw_hash.decode("utf-8"), u["role"]),
+                    "INSERT INTO users (id, email, password_hash, role, full_name) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (u["id"], u["email"], pw_hash.decode("utf-8"), u["role"],
+                     u.get("fullName", "")),
                 )
                 print(f"  + user  {u['id']}  {u['email']}  ({u['role']})")
 
             # ── Courses ──────────────────────────────────────────────
             for c in seed["courses"]:
                 cur.execute(
-                    "INSERT INTO courses (id, title, instructor_id) "
-                    "VALUES (%s, %s, %s)",
-                    (c["id"], c["title"], c["instructorId"]),
+                    "INSERT INTO courses (id, title, instructor_id, code) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (c["id"], c["title"], c["instructorId"], c.get("code")),
                 )
                 print(f"  + course  {c['id']}  {c['title']}")
+
+            # ── Quizzes and questions ────────────────────────────────
+            for qz in seed.get("quizzes", []):
+                cur.execute(
+                    "INSERT INTO quizzes (id, course_id, title, time_minutes) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (qz["id"], qz["courseId"], qz["title"], qz.get("timeMinutes", 30)),
+                )
+                print(f"  + quiz  {qz['id']}  {qz['courseId']}  {qz['title']}")
+            for qs in seed.get("questions", []):
+                cur.execute(
+                    "INSERT INTO questions "
+                    "(id, quiz_id, position, text, options, answer_key, points) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (qs["id"], qs["quizId"], qs.get("position", 1), qs["text"],
+                     json.dumps(qs["options"]), qs["answer"], qs.get("points", 1)),
+                )
+
+            # ── Forum and announcements ──────────────────────────────
+            for t in seed.get("topics", []):
+                cur.execute(
+                    "INSERT INTO topics (id, course_id, author_id, title, body) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (t["id"], t["courseId"], t["authorId"], t["title"], t["body"]),
+                )
+                print(f"  + topic  {t['id']}  {t['courseId']}  {t['title']}")
+            for k in seed.get("comments", []):
+                cur.execute(
+                    "INSERT INTO comments (id, topic_id, author_id, body) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (k["id"], k["topicId"], k["authorId"], k["body"]),
+                )
+            for n in seed.get("announcements", []):
+                cur.execute(
+                    "INSERT INTO announcements "
+                    "(id, course_id, created_by, title, body) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (n["id"], n["courseId"], n["createdBy"], n["title"], n["body"]),
+                )
 
             # ── Enrollments ──────────────────────────────────────────
             for e in seed["enrollments"]:

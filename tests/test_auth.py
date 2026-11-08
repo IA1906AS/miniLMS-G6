@@ -102,7 +102,15 @@ def test_me_returns_contract_fields_only(app):
             "password_hash": b"leak-check",
         }
         assert me_view() == (
-            {"id": "u4", "email": "chi.sv@lms.test", "role": "STUDENT"},
+            {
+                "id": "u4",
+                "email": "chi.sv@lms.test",
+                "role": "STUDENT",
+                "fullName": "",
+                "bio": "",
+                "phone": "",
+                "avatarUrl": None,
+            },
             200,
         )
 

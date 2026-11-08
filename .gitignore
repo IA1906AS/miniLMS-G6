@@ -7,3 +7,4 @@ __pycache__/
 .pip-audit-cache/
 .env
 audit.log
+uploads/

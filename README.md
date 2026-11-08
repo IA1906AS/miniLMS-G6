@@ -43,14 +43,32 @@ Có thể dùng `DATABASE_URL=postgresql://user:password@host:5432/database` tha
 
 - `/` (hoặc `/home`): chuyển đến `/login` nếu chưa đăng nhập; sau đăng nhập hiển thị khóa học và điểm cá nhân.
 - `/login`: đăng nhập; `/register`: đăng ký tài khoản.
-- `/account`: xem email / mã tài khoản / vai trò, đăng xuất.
+- `/account`: hồ sơ cá nhân (sửa họ tên/điện thoại/tiểu sử, ảnh đại diện), đổi mật khẩu, đăng xuất.
+- `/courses`: tra cứu / ghi danh / tạo khóa học; `/course`: trang chi tiết gồm tài liệu, bài tập, bài kiểm tra, diễn đàn, thông báo, thành viên.
 - `/reports`: xem trước và xuất CSV bảng điểm theo khóa học; tối đa 2 lượt xuất đồng thời mỗi process.
-- `POST /courses/<id>/quizzes/<qid>/attempts` và các endpoint kèm theo: lượt làm bài kiểm tra điều hành bằng máy trạng thái `IN_PROGRESS → SUBMITTED → GRADED` (module `app/attempt_sm.py`); chặn bỏ qua bước bắt đầu, sửa bài sau khi nộp, nộp sau hạn (`QUIZ_DEADLINE_MINUTES`, mặc định 120).
+- `/admin` (chỉ ADMIN): quản trị người dùng (vai trò, khóa tài khoản), gỡ khóa học, xem nhật ký hoạt động.
 - Tài khoản dữ liệu mẫu: `chi.sv@lms.test`, mật khẩu `Lms@2026` (chỉ dùng phát triển; xem `seed.json` để biết các vai trò khác).
 - Sinh viên chỉ thấy khóa học đã ghi danh; giảng viên chỉ thấy khóa học phụ trách; quản trị viên thấy tất cả khóa học.
-- JWT được giữ trong sessionStorage của tab cho đến khi hết hạn hoặc đăng xuất; API kiểm tra token ở phía server.
-- Đăng ký (`POST /auth/register`, trùng email bị từ chối) và đặt lại mật khẩu bằng OTP 8 số (`POST /auth/forgot-password` + `POST /auth/reset-password`, OTP có hiệu lực 5 phút; môi trường lab trả OTP trong response thay vì gửi email). Chưa có chức năng sửa hồ sơ.
+- JWT được giữ trong sessionStorage của tab cho đến khi hết hạn hoặc đăng xuất; API kiểm tra token ở phía server (đăng xuất thu hồi token qua jti).
 - Font web có fallback sang font hệ thống khi ngoại tuyến.
+
+## Tính năng theo đặc tả → API
+
+Tài liệu đầy đủ (không cần mạng): `GET /api/openapi.yaml`, hoặc mở file `openapi.yaml` ở thư mục gốc.
+
+| Nhóm đặc tả | Endpoint chính |
+|---|---|
+| 1. Đăng nhập / đăng ký / OTP | `POST /auth/login`, `POST /auth/register`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/change-password`, `POST /auth/logout` |
+| 2. Hồ sơ cá nhân | `GET/PUT /me`, `POST /me/avatar`, `GET /files/avatars/<name>`, `GET /members?courseId=` |
+| 3. Khóa học & ghi danh | `GET /api/courses?q=&instructorId=`, `POST /courses`, `PATCH /courses/<cid>`, `POST /courses/enroll`, `POST /courses/<cid>/students` |
+| 4. Tài liệu bài giảng | `POST/GET /courses/<cid>/materials`, `GET /materials/<mid>/download`, `DELETE /materials/<mid>` |
+| 5. Bài tập & bài nộp | `POST/GET /courses/<cid>/assignments`, `POST/GET /courses/<cid>/assignments/<aid>/submissions`, `GET /assignments/submissions/<sid>/download`, `POST /courses/<cid>/assignments/<aid>/submissions/<sid>/grade` |
+| 6. Bài kiểm tra (máy trạng thái + chấm tự động) | `POST/GET /courses/<cid>/quizzes[/<qid>]`, `POST/GET /courses/<cid>/quizzes/<qid>/attempts`, `PUT .../attempts/answers`, `POST .../attempts/submit`, `POST .../attempts/<sid>/grade` |
+| 7. Diễn đàn & thông báo | `POST/GET /courses/<cid>/topics`, `GET/PUT/DELETE /topics/<tid>`, `POST/GET /topics/<tid>/comments`, `PUT/DELETE /comments/<cid>`, `POST/GET /courses/<cid>/announcements` |
+| 8. Quản trị & nhật ký | `GET /admin/users?q=`, `PATCH /admin/users/<uid>`, `DELETE /admin/courses/<cid>`, `GET /admin/audit` |
+| Bảng điểm (P4–P6) | `GET/PUT /courses/<cid>/grades[/<sid>]`, `GET /courses/<cid>/grades/export` |
+
+Ghi chú: đặt lại mật khẩu dùng OTP 8 số, hiệu lực 5 phút; môi trường lab trả OTP trong response thay vì gửi email (thông báo khóa học cũng vậy — `emailQueued: true`). Lượt làm bài kiểm tra điều hành bằng máy trạng thái `IN_PROGRESS → SUBMITTED → GRADED` (module `app/attempt_sm.py`); chặn bỏ qua bước bắt đầu, sửa bài sau khi nộp, nộp sau hạn (`QUIZ_DEADLINE_MINUTES`, mặc định 120). Khi nộp, hệ thống chấm tự động theo đáp án (sinh viên không thấy đáp án) và giữ trạng thái SUBMITTED để giảng viên xác nhận/điều chỉnh. Sửa/xóa chủ đề và bình luận chỉ dành cho tác giả. Tệp tải lên nằm trong `uploads/` (đã gitignore), giới hạn 10 MB chung / 2 MB ảnh đại diện, phần mở rộng được kiểm duyệt.
 
 ## Kiểm thử
 

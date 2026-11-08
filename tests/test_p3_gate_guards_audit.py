@@ -121,6 +121,11 @@ def test_gate_allows_authenticated_request_and_sets_actor(client):
         "id": "u1",
         "email": "admin@lms.test",
         "role": "ADMIN",
+        "full_name": "Quản trị viên Hệ thống",
+        "bio": "",
+        "phone": "",
+        "avatar_path": None,
+        "locked": False,
     }
     # No sensitive fields leaked
     assert "password" not in actor

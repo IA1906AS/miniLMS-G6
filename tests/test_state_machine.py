@@ -126,13 +126,13 @@ def test_submitted_attempt_cannot_be_edited_or_resubmitted(client, app):
 def test_submit_after_deadline_is_rejected(client, app):
     em = auth(app, "u6")
     response = client.post(
-        "/courses/c2/quizzes/q1/attempts/submit",
+        "/courses/c2/quizzes/q3/attempts/submit",
         headers=em,
-        json={"answers": "A,C,B"},
+        json={"answers": "D,C"},
     )
     assert response.status_code == 409
     assert response.json["error"] == "DEADLINE_PASSED"
-    row = client.get("/courses/c2/quizzes/q1/attempts", headers=em).json[0]
+    row = client.get("/courses/c2/quizzes/q3/attempts", headers=em).json[0]
     assert row["state"] == IN_PROGRESS
 
 
