@@ -478,8 +478,8 @@ def submit_assignment(
         assignment_id, actor["id"], original_name, stored_name
     )
     if updated is None:
-        existing = current.get_submission_by_key(assignment_id, actor["id"])
-        raise DeadlinePassed() if existing else NotFound()
+        # The guarded INSERT can only fail on the deadline check here.
+        raise DeadlinePassed()
     return updated
 
 

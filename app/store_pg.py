@@ -650,21 +650,6 @@ class PgStore:
                 rows = cur.fetchall()
         return [self._submission_public(dict(r)) for r in rows]
 
-    def get_submission_by_key(self, aid: str, sid: str) -> dict | None:
-        with get_conn() as conn:
-            with get_cursor(conn) as cur:
-                cur.execute(
-                    """
-                    SELECT id, assignment_id, student_id, original_name,
-                           submitted_at, score, feedback, graded_at
-                    FROM submissions
-                    WHERE assignment_id = %s AND student_id = %s LIMIT 1
-                    """,
-                    (aid, sid),
-                )
-                row = cur.fetchone()
-        return self._submission_public(dict(row)) if row else None
-
     def get_submission_file(self, sub_id: str) -> dict | None:
         with get_conn() as conn:
             with get_cursor(conn) as cur:

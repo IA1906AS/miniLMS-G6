@@ -44,9 +44,9 @@ def main():
               f"{resp.json.get('error')}  {'(chặn)' if ok else '(LỖI: chưa chặn!)'}")
 
         resp = client.post(
-            "/courses/c2/quizzes/q1/attempts/submit",
+            "/courses/c2/quizzes/q3/attempts/submit",
             headers=em,
-            json={"answers": "A,C,B"},
+            json={"answers": "D,C"},
         )
         ok = resp.status_code == 409 and resp.json["error"] == "DEADLINE_PASSED"
         blocked.append(ok)
