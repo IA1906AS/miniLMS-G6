@@ -45,6 +45,7 @@ Có thể dùng `DATABASE_URL=postgresql://user:password@host:5432/database` tha
 - `/login`: đăng nhập; `/register`: đăng ký tài khoản.
 - `/account`: xem email / mã tài khoản / vai trò, đăng xuất.
 - `/reports`: xem trước và xuất CSV bảng điểm theo khóa học; tối đa 2 lượt xuất đồng thời mỗi process.
+- `POST /courses/<id>/quizzes/<qid>/attempts` và các endpoint kèm theo: lượt làm bài kiểm tra điều hành bằng máy trạng thái `IN_PROGRESS → SUBMITTED → GRADED` (module `app/attempt_sm.py`); chặn bỏ qua bước bắt đầu, sửa bài sau khi nộp, nộp sau hạn (`QUIZ_DEADLINE_MINUTES`, mặc định 120).
 - Tài khoản dữ liệu mẫu: `chi.sv@lms.test`, mật khẩu `Lms@2026` (chỉ dùng phát triển; xem `seed.json` để biết các vai trò khác).
 - Sinh viên chỉ thấy khóa học đã ghi danh; giảng viên chỉ thấy khóa học phụ trách; quản trị viên thấy tất cả khóa học.
 - JWT được giữ trong sessionStorage của tab cho đến khi hết hạn hoặc đăng xuất; API kiểm tra token ở phía server.
@@ -62,4 +63,18 @@ Kiểm thử Bulkhead độc lập trên Windows (PowerShell), cần PostgreSQL 
 
 ```powershell
 uv run --python 3.12 python scripts/check_bulkhead.py
+```
+
+Kiểm thử máy trạng thái P7 (lượt làm bài kiểm tra), cùng điều kiện như trên:
+
+```powershell
+uv run --python 3.12 python scripts/check_state_machine.py
+```
+
+Kết quả mong đợi: nộp khi chưa bắt đầu → `404`, sửa bài đã nộp → `409 INVALID_ATTEMPT_STATE`, nộp sau hạn → `409 DEADLINE_PASSED`, luồng hợp lệ start → save → submit → grade trả `200/201`.
+
+Bản "trước khi sửa" (chưa có máy trạng thái, tái hiện 3 triệu chứng trên) được lưu ở tag `p7-before`; bản "sau khi sửa" là commit hiện tại (tag `p7-after`). So sánh hai bản:
+
+```bash
+git diff p7-before p7-after -- app/attempt_sm.py app/services.py app/store_pg.py
 ```

@@ -1,13 +1,14 @@
-"""Demo triệu chứng của lượt làm bài kiểm tra CHƯA có máy trạng thái (P7, bản trước).
+"""Kiểm tra máy trạng thái cho lượt làm bài kiểm tra (P7, bản sau khi sửa).
 
 Chạy từ thư mục gốc sau khi đã khởi tạo và nạp dữ liệu mẫu:
     python db_init.py && python db_seed.py
     uv run --no-sync --python 3.12 python scripts/check_state_machine.py
 
-Ba triệu chứng được tái hiện trên dữ liệu mẫu:
-    1. Bỏ qua bước: nộp bài mà chưa từng bắt đầu -> vẫn được chấp nhận.
-    2. Sửa bài đã nộp: lưu lại câu trả lời sau khi SUBMITTED -> vẫn được chấp nhận.
-    3. Nộp sau hạn: deadline đã qua -> vẫn được chấp nhận.
+Ba lỗi từng xảy ra ở bản trước (tag p7-before) đều bị chặn:
+    1. Bỏ qua bước: nộp khi chưa bắt đầu      -> 404 NOT_FOUND
+    2. Sửa bài đã nộp                          -> 409 INVALID_ATTEMPT_STATE
+    3. Nộp sau hạn                             -> 409 DEADLINE_PASSED
+Kèm luồng hợp lệ start -> save -> submit -> grade và chặn thao tác sau GRADED.
 """
 
 import sys
@@ -30,57 +31,88 @@ def main():
             chi = {"Authorization": f"Bearer {create_token('u4')}"}
             dung = {"Authorization": f"Bearer {create_token('u5')}"}
             em = {"Authorization": f"Bearer {create_token('u6')}"}
+            an = {"Authorization": f"Bearer {create_token('u2')}"}
 
         client = app.test_client()
-        symptoms = []
+        blocked = []
 
-        # 1. Bỏ qua bước bắt đầu: u4 nộp quiz q9 mà chưa bao giờ bấm "bắt đầu"
+        # 1. Bỏ qua bước bắt đầu -> bị chặn, không tạo lượt "ma"
         resp = client.post(
             "/courses/c1/quizzes/q9/attempts/submit",
             headers=chi,
             json={"answers": "A,B,C"},
         )
-        accepted = resp.status_code == 200 and resp.json["state"] == "SUBMITTED"
-        symptoms.append(accepted)
+        ok = resp.status_code == 404 and resp.json["error"] == "NOT_FOUND"
+        blocked.append(ok)
         print(f"1. Nộp khi chưa bắt đầu      -> HTTP {resp.status_code} "
-              f"state={resp.json.get('state')}")
-        print("   TRIỆU CHỨNG: lượt làm bài được tạo thẳng ở trạng thái SUBMITTED, "
-              "bỏ qua bước làm bài.")
+              f"{resp.json.get('error')}  {'(chặn)' if ok else '(LỖI: chưa chặn!)'}")
 
-        # 2. Sửa bài đã nộp: u5 đã SUBMITTED (a2) vẫn sửa được câu trả lời
+        # 2. Sửa bài đã nộp -> bị chặn
         resp = client.put(
             "/courses/c1/quizzes/q1/attempts/answers",
             headers=dung,
             json={"answers": "đáp án mới sau khi nộp"},
         )
-        accepted = (
-            resp.status_code == 200
-            and resp.json["answers"] == "đáp án mới sau khi nộp"
-        )
-        symptoms.append(accepted)
+        ok = resp.status_code == 409 and resp.json["error"] == "INVALID_ATTEMPT_STATE"
+        blocked.append(ok)
         print(f"2. Sửa bài đã nộp            -> HTTP {resp.status_code} "
-              f"answers={resp.json.get('answers')!r}")
-        print("   TRIỆU CHỨNG: bài đã SUBMITTED vẫn bị sửa đổi tuỳ ý.")
+              f"{resp.json.get('error')}  {'(chặn)' if ok else '(LỖI: chưa chặn!)'}")
 
-        # 3. Nộp sau hạn: u6 có lượt IN_PROGRESS nhưng deadline đã qua 1 tiếng
+        # 3. Nộp sau hạn -> bị chặn
         resp = client.post(
             "/courses/c2/quizzes/q1/attempts/submit",
             headers=em,
             json={"answers": "A,C,B"},
         )
-        accepted = resp.status_code == 200 and resp.json["state"] == "SUBMITTED"
-        symptoms.append(accepted)
+        ok = resp.status_code == 409 and resp.json["error"] == "DEADLINE_PASSED"
+        blocked.append(ok)
         print(f"3. Nộp sau hạn               -> HTTP {resp.status_code} "
-              f"state={resp.json.get('state')}")
-        print("   TRIỆU CHỨNG: nộp sau deadline vẫn được ghi nhận là SUBMITTED.")
+              f"{resp.json.get('error')}  {'(chặn)' if ok else '(LỖI: chưa chặn!)'}")
+
+        # Luồng hợp lệ: start -> save -> submit -> grade
+        resp = client.post("/courses/c1/quizzes/q2/attempts", headers=chi)
+        assert resp.status_code == 201, resp.get_data(as_text=True)
+        print(f"4. Bắt đầu làm bài           -> HTTP 201 state={resp.json['state']}")
+        resp = client.put(
+            "/courses/c1/quizzes/q2/attempts/answers",
+            headers=chi,
+            json={"answers": "A,B"},
+        )
+        assert resp.status_code == 200
+        print(f"   Lưu câu trả lời           -> HTTP 200 state={resp.json['state']}")
+        resp = client.post(
+            "/courses/c1/quizzes/q2/attempts/submit",
+            headers=chi,
+            json={"answers": "A,C"},
+        )
+        assert resp.status_code == 200
+        print(f"   Nộp bài (trước hạn)       -> HTTP 200 state={resp.json['state']}")
+        resp = client.post(
+            "/courses/c1/quizzes/q2/attempts/u4/grade",
+            headers=an,
+            json={"score": 8.5},
+        )
+        assert resp.status_code == 200
+        print(f"   Giảng viên chấm           -> HTTP 200 state={resp.json['state']} "
+              f"score={resp.json['score']}")
+
+        # GRADED là trạng thái cuối: chấm lại / sửa / nộp lại đều bị chặn
+        resp = client.post(
+            "/courses/c1/quizzes/q2/attempts/u4/grade",
+            headers=an,
+            json={"score": 10},
+        )
+        ok = resp.status_code == 409 and resp.json["error"] == "INVALID_ATTEMPT_STATE"
+        blocked.append(ok)
+        print(f"5. Thao tác sau khi GRADED   -> HTTP {resp.status_code} "
+              f"{resp.json.get('error')}  {'(chặn)' if ok else '(LỖI: chưa chặn!)'}")
 
         print()
-        if all(symptoms):
-            print("KẾT LUẬN (bản trước): 3/3 triệu chứng tái hiện — "
-                  "thiếu máy trạng thái.")
+        if all(blocked):
+            print("KẾT LUẬN (bản sau): 3 triệu chứng cũ đã bị chặn hết — "
+                  "máy trạng thái hoạt động đúng.")
         else:
-            missing = 3 - sum(symptoms)
-            print(f"KẾT LUẬN: {missing} triệu chứng KHÔNG tái hiện — kiểm tra lại seed.")
+            print("KẾT LUẬN: có triệu chứng chưa được chặn — kiểm tra lại.")
             sys.exit(1)
 
 
