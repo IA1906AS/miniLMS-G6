@@ -10,6 +10,7 @@ Các bảng cần tồn tại (xem db_init.py):
 
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
 import bcrypt
@@ -696,6 +697,118 @@ class PgStore:
                 )
                 row = cur.fetchone()
         return self._submission_public(dict(row)) if row else None
+
+    # ------------------------------------------------------------------ #
+    #  Quizzes, questions, auto-grading                                   #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _quiz_public(row: dict) -> dict:
+        return {
+            "id": row["id"],
+            "courseId": row["course_id"],
+            "title": row["title"],
+            "timeMinutes": int(row["time_minutes"]),
+        }
+
+    def create_quiz(
+        self, cid: str, title: str, time_minutes: int, questions: list[dict]
+    ) -> dict:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO quizzes (id, course_id, title, time_minutes)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, course_id, title, time_minutes
+                    """,
+                    (uuid4().hex, cid, title, time_minutes),
+                )
+                quiz = dict(cur.fetchone())
+                for question in questions:
+                    cur.execute(
+                        """
+                        INSERT INTO questions
+                            (id, quiz_id, position, text, options, answer_key, points)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            uuid4().hex,
+                            quiz["id"],
+                            question["position"],
+                            question["text"],
+                            json.dumps(question["options"]),
+                            question["answer_key"],
+                            question["points"],
+                        ),
+                    )
+        return self._quiz_public(quiz)
+
+    def list_quizzes(self, cid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, title, time_minutes
+                    FROM quizzes WHERE course_id = %s ORDER BY id
+                    """,
+                    (cid,),
+                )
+                rows = cur.fetchall()
+        return [self._quiz_public(dict(r)) for r in rows]
+
+    def get_quiz(self, qid: str) -> dict | None:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, course_id, title, time_minutes
+                    FROM quizzes WHERE id = %s LIMIT 1
+                    """,
+                    (qid,),
+                )
+                row = cur.fetchone()
+        return self._quiz_public(dict(row)) if row else None
+
+    def list_questions(self, qid: str) -> list[dict]:
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    SELECT id, quiz_id, position, text, options, answer_key, points
+                    FROM questions WHERE quiz_id = %s ORDER BY position, id
+                    """,
+                    (qid,),
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "id": r["id"],
+                "position": int(r["position"]),
+                "text": r["text"],
+                "options": json.loads(r["options"]),
+                "answerKey": r["answer_key"],
+                "points": int(r["points"]),
+            }
+            for r in rows
+        ]
+
+    def set_attempt_score(self, cid: str, qid: str, sid: str, score: float) -> dict | None:
+        """Record the auto-computed score while the attempt stays SUBMITTED."""
+        with get_conn() as conn:
+            with get_cursor(conn) as cur:
+                cur.execute(
+                    """
+                    UPDATE quiz_attempts
+                    SET score = %s, updated_at = NOW()
+                    WHERE course_id = %s AND quiz_id = %s AND student_id = %s
+                      AND state = 'SUBMITTED'
+                    RETURNING score
+                    """,
+                    (score, cid, qid, sid),
+                )
+                row = cur.fetchone()
+        return dict(row) if row else None
 
     # ------------------------------------------------------------------ #
     #  Enrollment / grade queries                                          #

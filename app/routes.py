@@ -552,3 +552,26 @@ def register_routes(app):
             score=submission["score"],
         )
         return jsonify(submission), 200
+
+    # ── Quizzes ─────────────────────────────────────────────────────────
+
+    @app.post("/courses/<course_id>/quizzes")
+    @require_role("INSTRUCTOR", "ADMIN")
+    def create_quiz(course_id):
+        store = current_app.extensions["store"]
+        quiz = services.create_quiz(
+            g.actor, course_id, request.get_json(silent=True), store=store
+        )
+        return jsonify(quiz), 201
+
+    @app.get("/courses/<course_id>/quizzes")
+    def list_quizzes(course_id):
+        store = current_app.extensions["store"]
+        rows = services.list_quizzes(g.actor, course_id, store=store)
+        return jsonify(rows), 200
+
+    @app.get("/courses/<course_id>/quizzes/<quiz_id>")
+    def get_quiz(course_id, quiz_id):
+        store = current_app.extensions["store"]
+        quiz = services.get_quiz(g.actor, course_id, quiz_id, store=store)
+        return jsonify(quiz), 200

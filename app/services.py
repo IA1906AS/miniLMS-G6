@@ -190,6 +190,9 @@ def submit_attempt(actor, course_id, quiz_id, answers, *, store=None):
     )
     if updated is None:
         raise NotFound()
+    score = _autograde(current, course_id, quiz_id, actor["id"], validated)
+    if score is not None:
+        updated = dict(updated, score=score)
     return updated
 
 
@@ -528,3 +531,107 @@ def grade_submission(
     if graded is None:
         raise NotFound()
     return graded
+
+
+# ------------------------------------------------------------------ #
+#  Quizzes, questions, auto-grading                                    #
+# ------------------------------------------------------------------ #
+
+
+def _validate_questions(raw):
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 50:
+        raise ValidationError()
+    questions = []
+    for position, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            raise ValidationError()
+        text = item.get("text", "")
+        options = item.get("options", [])
+        answer_index = item.get("answerIndex")
+        points = item.get("points", 1)
+        if not isinstance(text, str) or not 1 <= len(text.strip()) <= 500:
+            raise ValidationError()
+        if (
+            not isinstance(options, list)
+            or not 2 <= len(options) <= 6
+            or not all(isinstance(o, str) and o.strip() for o in options)
+        ):
+            raise ValidationError()
+        if (
+            isinstance(answer_index, bool)
+            or not isinstance(answer_index, int)
+            or not 0 <= answer_index < len(options)
+        ):
+            raise ValidationError()
+        if isinstance(points, bool) or not isinstance(points, int) or not 1 <= points <= 10:
+            raise ValidationError()
+        questions.append(
+            {
+                "position": position,
+                "text": text.strip(),
+                "options": [o.strip() for o in options],
+                "answer_key": chr(ord("A") + answer_index),
+                "points": points,
+            }
+        )
+    return questions
+
+
+def create_quiz(actor, course_id, payload, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    if actor["role"] != "ADMIN" and not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    if not isinstance(payload, dict):
+        raise ValidationError()
+    title = payload.get("title", "")
+    time_minutes = payload.get("timeMinutes", 30)
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 200:
+        raise ValidationError()
+    if isinstance(time_minutes, bool) or not isinstance(time_minutes, int):
+        raise ValidationError()
+    if not 1 <= time_minutes <= 180:
+        raise ValidationError()
+    questions = _validate_questions(payload.get("questions"))
+    return current.create_quiz(course_id, title.strip(), time_minutes, questions)
+
+
+def list_quizzes(actor, course_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _course_visible(current, actor, course_id)
+    return current.list_quizzes(course_id)
+
+
+def get_quiz(actor, course_id, quiz_id, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    quiz = current.get_quiz(quiz_id)
+    if quiz is None or quiz["courseId"] != course_id:
+        raise NotFound()
+    _course_visible(current, actor, course_id)
+    questions = current.list_questions(quiz_id)
+    if actor["role"] == "STUDENT":
+        questions = [
+            {k: v for k, v in q.items() if k != "answerKey"} for q in questions
+        ]
+    return {**quiz, "questions": questions}
+
+
+def _autograde(store, course_id, quiz_id, student_id, answers_text):
+    """Score submitted answers against the answer key; None if quiz has none."""
+    questions = store.list_questions(quiz_id)
+    if not questions:
+        return None
+    submitted = [a.strip().upper() for a in answers_text.split(",")]
+    total = sum(q["points"] for q in questions)
+    earned = 0
+    for index, question in enumerate(questions):
+        answer = submitted[index] if index < len(submitted) else ""
+        if answer == question["answerKey"]:
+            earned += question["points"]
+    score = round(10 * earned / total, 1)
+    store.set_attempt_score(course_id, quiz_id, student_id, score)
+    return score
