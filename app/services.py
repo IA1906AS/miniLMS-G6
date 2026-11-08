@@ -1,5 +1,8 @@
+from datetime import datetime, timedelta, timezone
+
+from app import attempt_sm
 from app.errors import Forbidden, NotFound, ValidationError
-from app.schemas import validate_grade_body, validate_score
+from app.schemas import validate_answers, validate_grade_body, validate_score
 
 _store = None
 
@@ -117,3 +120,99 @@ def update_grade(actor, course_id, student_id, score, *, version=None, store=Non
 
     new_version = updated["version"]
     return old_score, validated_score, new_version
+
+
+def _require_student_enrolled(store, actor, course_id):
+    if actor["role"] != "STUDENT":
+        raise Forbidden()
+    if store.get_enrollment(course_id, actor["id"]) is None:
+        raise Forbidden()
+
+
+def start_attempt(actor, course_id, quiz_id, *, deadline_minutes, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _require_student_enrolled(current, actor, course_id)
+    deadline = datetime.now(timezone.utc) + timedelta(minutes=deadline_minutes)
+    return current.start_attempt(course_id, quiz_id, actor["id"], deadline)
+
+
+def get_attempts(actor, course_id, quiz_id, *, student_id=None, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+
+    if actor["role"] == "ADMIN":
+        return current.list_attempts(course_id, quiz_id)
+    if actor["role"] == "INSTRUCTOR":
+        if not current.is_instructor_of(actor["id"], course_id):
+            raise Forbidden()
+        return current.list_attempts(course_id, quiz_id)
+
+    if student_id and student_id != actor["id"]:
+        raise Forbidden()
+    row = current.get_attempt(course_id, quiz_id, actor["id"])
+    return [row] if row else []
+
+
+def save_answers(actor, course_id, quiz_id, answers, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _require_student_enrolled(current, actor, course_id)
+    validated = validate_answers(answers)
+    attempt = current.get_attempt(course_id, quiz_id, actor["id"])
+    if attempt is None:
+        raise NotFound()
+    attempt_sm.transition(attempt["state"], attempt_sm.SAVE)
+    updated = current.save_answers(
+        course_id, quiz_id, actor["id"], validated, from_state=attempt["state"]
+    )
+    if updated is None:
+        raise NotFound()
+    return updated
+
+
+def submit_attempt(actor, course_id, quiz_id, answers, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    _require_student_enrolled(current, actor, course_id)
+    validated = validate_answers(answers)
+    attempt = current.get_attempt(course_id, quiz_id, actor["id"])
+    if attempt is None:
+        raise NotFound()
+    to_state = attempt_sm.transition(attempt["state"], attempt_sm.SUBMIT)
+    updated = current.submit_attempt(
+        course_id,
+        quiz_id,
+        actor["id"],
+        validated,
+        from_state=attempt["state"],
+        to_state=to_state,
+    )
+    if updated is None:
+        raise NotFound()
+    return updated
+
+
+def grade_attempt(actor, course_id, quiz_id, student_id, score, *, store=None):
+    current = _get_store(store)
+    _course(current, course_id)
+    if actor["role"] != "INSTRUCTOR" or not current.is_instructor_of(
+        actor["id"], course_id
+    ):
+        raise Forbidden()
+    validated = validate_score(score)
+    attempt = current.get_attempt(course_id, quiz_id, student_id)
+    if attempt is None:
+        raise NotFound()
+    to_state = attempt_sm.transition(attempt["state"], attempt_sm.GRADE)
+    updated = current.grade_attempt(
+        course_id,
+        quiz_id,
+        student_id,
+        validated,
+        from_state=attempt["state"],
+        to_state=to_state,
+    )
+    if updated is None:
+        raise NotFound()
+    return updated

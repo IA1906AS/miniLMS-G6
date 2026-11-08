@@ -42,6 +42,24 @@ class AccountLocked(ApiError):
     code = "ACCOUNT_LOCKED"
 
 
+class InvalidAttemptState(ApiError):
+    status = 409
+    code = "INVALID_ATTEMPT_STATE"
+
+    def __init__(self, message="Chuyển trạng thái không hợp lệ cho lượt làm bài"):
+        super().__init__(message)
+        self.message = message
+
+
+class DeadlinePassed(ApiError):
+    status = 409
+    code = "DEADLINE_PASSED"
+
+    def __init__(self, message="Đã quá hạn nộp bài"):
+        super().__init__(message)
+        self.message = message
+
+
 def register_error_handlers(app):
     @app.errorhandler(ApiError)
     def _handle_api_error(e):

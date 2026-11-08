@@ -50,6 +50,21 @@ CREATE TABLE IF NOT EXISTS enrollments (
 
 ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;
 
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+    id          VARCHAR(50)  PRIMARY KEY,
+    course_id   VARCHAR(50)  NOT NULL REFERENCES courses(id),
+    quiz_id     VARCHAR(50)  NOT NULL,
+    student_id  VARCHAR(50)  NOT NULL REFERENCES users(id),
+    answers     TEXT         NOT NULL DEFAULT '',
+    score       NUMERIC(4,1),
+    state       VARCHAR(20)  NOT NULL DEFAULT 'IN_PROGRESS'
+                CHECK (state IN ('IN_PROGRESS', 'SUBMITTED', 'GRADED')),
+    deadline    TIMESTAMPTZ  NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE (course_id, quiz_id, student_id)
+);
+
 CREATE TABLE IF NOT EXISTS password_resets (
     email      VARCHAR(255) PRIMARY KEY,
     otp_hash   TEXT        NOT NULL,

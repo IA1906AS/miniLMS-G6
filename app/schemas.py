@@ -17,3 +17,12 @@ def validate_grade_body(payload):
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
         raise ValidationError()
     return score, version
+
+
+def validate_answers(value):
+    if not isinstance(value, str):
+        raise ValidationError()
+    stripped = value.strip()
+    if not 1 <= len(stripped) <= 4000:
+        raise ValidationError()
+    return stripped

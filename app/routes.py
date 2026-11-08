@@ -203,3 +203,78 @@ def register_routes(app):
         if isinstance(body, dict) and "version" in body:
             resp["version"] = new_version
         return jsonify(resp), 200
+
+    @app.post("/courses/<course_id>/quizzes/<quiz_id>/attempts")
+    @require_role("STUDENT")
+    def start_quiz_attempt(course_id, quiz_id):
+        store = current_app.extensions["store"]
+        attempt = services.start_attempt(
+            g.actor,
+            course_id,
+            quiz_id,
+            deadline_minutes=int(current_app.config["QUIZ_DEADLINE_MINUTES"]),
+            store=store,
+        )
+        return jsonify(attempt), 201
+
+    @app.get("/courses/<course_id>/quizzes/<quiz_id>/attempts")
+    @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
+    def get_quiz_attempts(course_id, quiz_id):
+        store = current_app.extensions["store"]
+        rows = services.get_attempts(
+            g.actor,
+            course_id,
+            quiz_id,
+            student_id=request.args.get("studentId"),
+            store=store,
+        )
+        return jsonify(rows), 200
+
+    @app.put("/courses/<course_id>/quizzes/<quiz_id>/attempts/answers")
+    @require_role("STUDENT")
+    def save_quiz_answers(course_id, quiz_id):
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        answers = body.get("answers") if isinstance(body, dict) else None
+        attempt = services.save_answers(
+            g.actor, course_id, quiz_id, answers, store=store
+        )
+        return jsonify(attempt), 200
+
+    @app.post("/courses/<course_id>/quizzes/<quiz_id>/attempts/submit")
+    @require_role("STUDENT")
+    def submit_quiz_attempt(course_id, quiz_id):
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        answers = body.get("answers") if isinstance(body, dict) else None
+        attempt = services.submit_attempt(
+            g.actor, course_id, quiz_id, answers, store=store
+        )
+        log_event(
+            g.actor["id"],
+            "SUBMIT_ATTEMPT",
+            f"{course_id}/{quiz_id}",
+            "SUCCESS",
+            state=attempt["state"],
+        )
+        return jsonify(attempt), 200
+
+    @app.post(
+        "/courses/<course_id>/quizzes/<quiz_id>/attempts/<student_id>/grade"
+    )
+    @require_role("INSTRUCTOR")
+    def grade_quiz_attempt(course_id, quiz_id, student_id):
+        store = current_app.extensions["store"]
+        body = request.get_json(silent=True)
+        score = body.get("score") if isinstance(body, dict) else None
+        attempt = services.grade_attempt(
+            g.actor, course_id, quiz_id, student_id, score, store=store
+        )
+        log_event(
+            g.actor["id"],
+            "GRADE_ATTEMPT",
+            f"{course_id}/{quiz_id}/{student_id}",
+            "SUCCESS",
+            score=attempt["score"],
+        )
+        return jsonify(attempt), 200

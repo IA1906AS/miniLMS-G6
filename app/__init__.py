@@ -26,6 +26,7 @@ def create_app(config=None):
         JWT_SECRET=secret,
         TOKEN_TTL_SECONDS=int(cfg.get("TOKEN_TTL_SECONDS", 900)),
         AUDIT_LOG_PATH=cfg.get("AUDIT_LOG_PATH", "audit.log"),
+        QUIZ_DEADLINE_MINUTES=int(cfg.get("QUIZ_DEADLINE_MINUTES", 120)),
     )
 
     # ── Khởi tạo PostgreSQL connection pool ──────────────────────────────

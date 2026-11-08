@@ -10,6 +10,7 @@ Run db_init.py first to create the tables.
 import json
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import bcrypt
@@ -48,6 +49,7 @@ def seed_db():
         with conn.cursor() as cur:
             # Clear in reverse FK order
             cur.execute("DELETE FROM password_resets")
+            cur.execute("DELETE FROM quiz_attempts")
             cur.execute("DELETE FROM enrollments")
             cur.execute("DELETE FROM courses")
             cur.execute("DELETE FROM users")
@@ -83,6 +85,23 @@ def seed_db():
                 print(
                     f"  + enrollment  {e['courseId']} / {e['studentId']}  "
                     f"score={e['score']}"
+                )
+
+            # ── Quiz attempts ──────────────────────────────────────
+            for a in seed.get("quizAttempts", []):
+                deadline = datetime.now(timezone.utc) + timedelta(
+                    minutes=a["deadlineOffsetMinutes"]
+                )
+                cur.execute(
+                    "INSERT INTO quiz_attempts "
+                    "(id, course_id, quiz_id, student_id, answers, state, deadline) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (a["id"], a["courseId"], a["quizId"], a["studentId"],
+                     a["answers"], a["state"], deadline),
+                )
+                print(
+                    f"  + attempt  {a['id']}  {a['courseId']}/{a['quizId']}/"
+                    f"{a['studentId']}  state={a['state']}"
                 )
 
         conn.commit()
