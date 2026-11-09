@@ -96,3 +96,35 @@ Bản "trước khi sửa" (chưa có máy trạng thái, tái hiện 3 triệu 
 ```bash
 git diff p7-before p7-after -- app/attempt_sm.py app/services.py app/store_pg.py
 ```
+
+## Retry với exponential backoff + jitter
+
+Các thao tác tạo pool và lấy connection PostgreSQL được retry khi gặp lỗi tạm
+thời (`OperationalError`, `InterfaceError`, pool tạm cạn) bằng exponential
+backoff kèm full jitter, cài đặt trong `app/retry.py` và áp dụng ở `app/db.py`:
+
+- Lần retry thứ `n` có trần delay `min(DB_RETRY_MAX_DELAY_MS, DB_RETRY_BASE_DELAY_MS * 2**(n-1))`;
+  delay thực tế là ngẫu nhiên trong `[0, trần]` để nhiều request không retry
+  cùng lúc (tránh "thundering herd").
+- Retry áp dụng cho lúc tạo pool (database khởi động chậm) và lúc checkout
+  connection (pool tạm cạn). Câu lệnh/transaction đã chạy bên trong `get_conn()`
+  **không** retry tự động để tránh ghi dữ liệu hai lần.
+- Mỗi lần retry ghi log WARNING dạng `DB connect/checkout failed (1/4): ...; retrying in ...`.
+
+Cấu hình trong `.env` (giá trị mặc định trong ngoặc):
+
+| Biến | Ý nghĩa | Mặc định |
+|---|---|---|
+| `DB_RETRY_ATTEMPTS` | Tổng số lần thử | `4` |
+| `DB_RETRY_BASE_DELAY_MS` | Trần delay của lần retry đầu (ms) | `100` |
+| `DB_RETRY_MAX_DELAY_MS` | Trần delay tối đa (ms) | `2000` |
+
+Kiểm chứng nhanh, không cần PostgreSQL:
+
+```powershell
+uv run --python 3.12 python scripts/check_retry.py
+```
+
+Kết quả mong đợi: delay tăng `0.2 → 0.4 → 0.8 → 1.0s` khi tắt jitter; jitter luôn
+nằm trong trần; retry dừng đúng số lần và ném lại lỗi cuối; `get_conn` retry
+checkout rồi commit và trả connection về pool.
