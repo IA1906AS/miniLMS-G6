@@ -1,10 +1,37 @@
 from collections.abc import Callable
+from contextlib import contextmanager
 from functools import wraps
+from threading import Lock
 from typing import Any
 
 from flask import g, has_request_context
 
 from app.errors import Forbidden
+
+
+class ExportBusy(Exception):
+    """No grade-export capacity remains in this process."""
+
+
+class ExportBulkhead:
+    """Bound concurrent exports without making callers wait for a slot."""
+
+    def __init__(self, limit=2):
+        self.limit = limit
+        self._active = 0
+        self._lock = Lock()
+
+    @contextmanager
+    def slot(self):
+        with self._lock:
+            if self._active >= self.limit:
+                raise ExportBusy()
+            self._active += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._active -= 1
 
 
 def require_role(*roles: Any) -> Callable:
