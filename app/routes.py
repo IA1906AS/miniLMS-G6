@@ -35,7 +35,7 @@ from app.errors import (
     InvalidCurrentPassword,
     ValidationError,
 )
-from app.guards import require_role
+from app.guards import ExportBusy, require_role
 
 
 def render_grade_csv(rows):
@@ -244,16 +244,20 @@ def register_routes(app):
     @app.get("/courses/<course_id>/grades/export")
     @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
     def export_course_grades(course_id):
-        rows = services.get_grades(
-            g.actor, course_id, store=current_app.extensions["store"]
-        )
-        content = render_grade_csv(rows)
-        filename = f"grades-{secure_filename(course_id) or 'course'}.csv"
-        return Response(
-            content,
-            mimetype="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
+        try:
+            with current_app.extensions["grade_export_bulkhead"].slot():
+                rows = services.get_grades(
+                    g.actor, course_id, store=current_app.extensions["store"]
+                )
+                content = render_grade_csv(rows)
+                filename = f"grades-{secure_filename(course_id) or 'course'}.csv"
+                return Response(
+                    content,
+                    mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                )
+        except ExportBusy:
+            return {"error": "EXPORT_BUSY"}, 503
 
     @app.put("/courses/<course_id>/grades/<student_id>")
     @require_role("ADMIN", "INSTRUCTOR", "STUDENT")
