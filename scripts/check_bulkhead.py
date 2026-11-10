@@ -4,7 +4,7 @@ Run from the repository root: uv run --no-sync python scripts/check_bulkhead.py
 """
 
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Lock
@@ -41,8 +41,8 @@ def main():
                 if active == 2:
                     two_active.set()
             try:
-                if not release.wait(10):
-                    raise TimeoutError("Hai request đầu không được nhả")
+                if not release.wait(30):
+                    raise TimeoutError("Các request không được nhả")
                 return original_render(rows)
             finally:
                 with lock:
@@ -51,7 +51,8 @@ def main():
         def export():
             return app.test_client().get("/courses/c1/grades/export", headers=headers)
 
-        results = [False] * 5
+        responses = [None] * 5
+        ready = False
 
         def response_or_none(future):
             try:
@@ -66,24 +67,27 @@ def main():
                 try:
                     ready = two_active.wait(10)
                     last = [pool.submit(export) for _ in range(3)]
-                    for index, future in enumerate(last, start=2):
-                        response = response_or_none(future)
-                        results[index] = (ready and response is not None and
-                                          response.status_code == 503 and
-                                          response.json == {"error": "EXPORT_BUSY"})
+                    # On an unfixed build these requests also enter the renderer.
+                    # Never wait for them to finish while the renderer is held.
+                    wait(last, timeout=2)
                 finally:
                     release.set()
-                for index, future in enumerate(first):
-                    response = response_or_none(future)
-                    results[index] = (ready and response is not None and
-                                      response.status_code == 200)
+                for index, future in enumerate(first + last):
+                    responses[index] = response_or_none(future)
         finally:
             routes.render_grade_csv = original_render
             release.set()
 
-        for index, passed in enumerate(results, start=1):
-            print(f"[+] Slot {index}: {'Pass' if passed else 'Failed'}")
-        if not all(results):
+        for index, response in enumerate(responses, start=1):
+            accepted = response is not None and response.status_code == 200
+            print(f"[+] Slot {index}: {'Pass' if accepted else 'Failed'}")
+        expected = (ready and
+                    all(response is not None and response.status_code == 200
+                        for response in responses[:2]) and
+                    all(response is not None and response.status_code == 503 and
+                        response.json == {"error": "EXPORT_BUSY"}
+                        for response in responses[2:]))
+        if not expected:
             sys.exit(1)
 
 
