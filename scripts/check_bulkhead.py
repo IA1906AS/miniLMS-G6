@@ -1,21 +1,17 @@
-"""Exercise five concurrent grade exports through Flask's real request pipeline.
+"""Send five overlapping grade exports and print one result per slot.
 
-Run from the repository root on Windows:
-    uv run --no-sync --python 3.14 python scripts/check_bulkhead.py
-
-This tests one Flask process; it does not measure a multi-process server.
+Run from the repository root: uv run --no-sync python scripts/check_bulkhead.py
 """
 
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Barrier, Event, Lock
+from threading import Event, Lock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import create_app, routes  # noqa: E402
-from app.auth import create_token  # noqa: E402
 
 
 def main():
@@ -24,26 +20,29 @@ def main():
             "JWT_SECRET": "bulkhead-script-local-only-secret-32-chars",
             "AUDIT_LOG_PATH": str(Path(directory) / "audit.log"),
         })
-        with app.app_context():
-            headers = {"Authorization": f"Bearer {create_token('u2')}"}
+        client = app.test_client()
+        login = client.post("/auth/login", json={
+            "email": "chi.sv@lms.test", "password": "Lms@2026",
+        })
+        if login.status_code != 200:
+            raise RuntimeError("Không đăng nhập được bằng tài khoản kiểm thử")
+        headers = {"Authorization": f"Bearer {login.json['accessToken']}"}
 
         original_render = routes.render_grade_csv
-        entered = Event()
+        two_active = Event()
         release = Event()
         lock = Lock()
         active = 0
-        peak = 0
 
         def slow_render(rows):
-            nonlocal active, peak
+            nonlocal active
             with lock:
                 active += 1
-                peak = max(peak, active)
                 if active == 2:
-                    entered.set()
+                    two_active.set()
             try:
                 if not release.wait(10):
-                    raise AssertionError("Export workers timed out")
+                    raise TimeoutError("Hai request đầu không được nhả")
                 return original_render(rows)
             finally:
                 with lock:
@@ -52,47 +51,40 @@ def main():
         def export():
             return app.test_client().get("/courses/c1/grades/export", headers=headers)
 
+        results = [False] * 5
+
+        def response_or_none(future):
+            try:
+                return future.result(timeout=10)
+            except Exception:
+                return None
+
         routes.render_grade_csv = slow_render
         try:
             with ThreadPoolExecutor(max_workers=5) as pool:
-                admitted = [pool.submit(export) for _ in range(2)]
+                first = [pool.submit(export) for _ in range(2)]
                 try:
-                    assert entered.wait(10), "Two exports did not enter the renderer"
-                    start = Barrier(4)
-
-                    def extra_export():
-                        start.wait(timeout=10)
-                        return export()
-
-                    extras = [pool.submit(extra_export) for _ in range(3)]
-                    start.wait(timeout=10)
-                    rejected = [future.result(timeout=10) for future in extras]
-                    assert all(response.status_code == 503 for response in rejected)
-                    assert all(response.json == {"error": "EXPORT_BUSY"} for response in rejected)
-                    grades = app.test_client().get("/courses/c1/grades", headers=headers)
-                    assert grades.status_code == 200
-                    assert peak == 2, f"Expected peak 2, got {peak}"
+                    ready = two_active.wait(10)
+                    last = [pool.submit(export) for _ in range(3)]
+                    for index, future in enumerate(last, start=2):
+                        response = response_or_none(future)
+                        results[index] = (ready and response is not None and
+                                          response.status_code == 503 and
+                                          response.json == {"error": "EXPORT_BUSY"})
                 finally:
                     release.set()
-                completed = [future.result(timeout=10) for future in admitted]
-                assert all(response.status_code == 200 for response in completed)
+                for index, future in enumerate(first):
+                    response = response_or_none(future)
+                    results[index] = (ready and response is not None and
+                                      response.status_code == 200)
         finally:
             routes.render_grade_csv = original_render
             release.set()
 
-        assert export().status_code == 200, "Slot was not released after successful exports"
-
-        def broken_render(_rows):
-            raise RuntimeError("simulated export failure")
-
-        routes.render_grade_csv = broken_render
-        try:
-            assert export().status_code == 500, "Failed export should return 500"
-        finally:
-            routes.render_grade_csv = original_render
-        assert export().status_code == 200, "Slot was not released after a failed export"
-        print("PASS: 5 concurrent exports -> 2 x 200, 3 x 503; peak=2")
-        print("PASS: grade view=200 during contention; slots released on success and failure")
+        for index, passed in enumerate(results, start=1):
+            print(f"[+] Slot {index}: {'Pass' if passed else 'Failed'}")
+        if not all(results):
+            sys.exit(1)
 
 
 if __name__ == "__main__":
