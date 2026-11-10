@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from flask import Flask
 
@@ -22,12 +23,19 @@ def create_app(config=None):
         raise RuntimeError("JWT_SECRET must be set and at least 32 characters long")
 
     app = Flask(__name__)
+    # Chuẩn hoá UPLOAD_DIR thành đường dẫn tuyệt đối ngay khi nạp cấu hình:
+    # save_upload() ghi tệp theo đường dẫn này, còn send_file()/
+    # send_from_directory() của Flask phân giải đường dẫn tương đối theo
+    # app.root_path (<repo>/app). Nếu giữ đường dẫn tương đối, tệp được ghi ở
+    # <cwd>/uploads nhưng lại bị tìm ở <repo>/app/uploads -> tải tệp lỗi 500
+    # và ảnh đại diện lỗi 404 với cấu hình mặc định.
+    upload_dir = cfg.get("UPLOAD_DIR") or "uploads"
     app.config.update(
         JWT_SECRET=secret,
         TOKEN_TTL_SECONDS=int(cfg.get("TOKEN_TTL_SECONDS", 900)),
         AUDIT_LOG_PATH=cfg.get("AUDIT_LOG_PATH", "audit.log"),
         QUIZ_DEADLINE_MINUTES=int(cfg.get("QUIZ_DEADLINE_MINUTES", 120)),
-        UPLOAD_DIR=cfg.get("UPLOAD_DIR", "uploads"),
+        UPLOAD_DIR=str(Path(upload_dir).expanduser().resolve()),
         MAX_CONTENT_LENGTH=12 * 1024 * 1024,
     )
 
