@@ -1,11 +1,14 @@
 """Upload helpers: validate and persist files on local disk."""
 
+import logging
 from pathlib import Path
 from uuid import uuid4
 
 from werkzeug.utils import secure_filename
 
 from .errors import ValidationError
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "pdf", "doc", "docx", "zip", "txt"}
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
@@ -42,5 +45,18 @@ def upload_path(upload_dir, subdir, stored_name):
 
 
 def delete_upload(upload_dir, subdir, stored_name):
-    if stored_name:
+    """Xoá tệp đã lưu; không để lỗi hệ tệp biến request xoá thành 500.
+
+    Trên Windows, tệp đang được một lượt tải khác mở sẽ không xoá được
+    (PermissionError / WinError 32). Bản ghi đã bị xoá khỏi DB trước đó nên
+    trả 500 chỉ gây hiểu nhầm; ghi cảnh báo để dọn tệp mồ côi sau.
+    """
+    if not stored_name:
+        return
+    try:
         upload_path(upload_dir, subdir, stored_name).unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning(
+            "Không xoá được tệp tải lên %s/%s: %s", subdir, stored_name, exc
+        )
+
